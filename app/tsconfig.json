@@ -2,7 +2,9 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "module": "ESNext"
+    "module": "ESNext",
+    "baseUrl": ".",
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["**/*.ts","**/*.tsx"]
 }
