@@ -1,0 +1,16 @@
+{
+  "name": "recuerdamed-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "app"
+  ],
+  "scripts": {
+    "start": "cd app && npm start",
+    "android": "cd app && npm run android",
+    "ios": "cd app && npm run ios",
+    "web": "cd app && npm run web",
+    "lint": "cd app && npm run lint"
+  },
+  "devDependencies": {}
+}

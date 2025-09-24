@@ -1,0 +1,30 @@
+{
+  "folders": [
+    {
+      "name": "RecuerdaMed App",
+      "path": "./app"
+    },
+    {
+      "name": "Backend",
+      "path": "./backend"
+    },
+    {
+      "name": "Docs",
+      "path": "./docs"
+    }
+  ],
+  "settings": {
+    "typescript.preferences.useAliasesForRenames": false,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "expo.vscode-expo-tools",
+      "bradlc.vscode-tailwindcss",
+      "ms-vscode.vscode-typescript-next"
+    ]
+  }
+}
