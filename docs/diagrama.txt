@@ -1,0 +1,15 @@
+recuerdamed/          # Repo raíz
+ ├── app/             # Proyecto Expo (Android/iOS en el futuro)
+ │    ├── App.tsx
+ │    ├── screens/
+ │    ├── services/
+ │    ├── lib/
+ │    └── package.json
+ ├── backend/         # Proyecto Node.js (API/worker para push y jobs)
+ │    ├── src/
+ │    │    └── server.ts
+ │    └── package.json
+ ├── docs/            # Documentación, scripts SQL, diagramas
+ │    └── db-schema.sql
+ ├── .gitignore
+ └── README.md
