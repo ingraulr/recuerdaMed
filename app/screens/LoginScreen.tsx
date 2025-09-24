@@ -26,6 +26,8 @@ export default function LoginScreen({ navigation }: any) {
 
   const clean = (s?: string) => (s ?? '').trim();
 
+
+
   async function handleRegister() {
     const e = clean(email);
     const p = clean(password);
@@ -36,13 +38,55 @@ export default function LoginScreen({ navigation }: any) {
     }
 
     setLoading(true);
+    
     try {
-      const { error } = await supabase.auth.signUp({ email: e, password: p });
+      console.log('📝 Intentando registro con:', e);
+      
+      const { data, error } = await supabase.auth.signUp({ email: e, password: p });
+      
       if (error) throw error;
-      Alert.alert('¡Bienvenido!', 'Si la confirmación por correo está activa, revisa tu email.');
+      
+      console.log('✅ Registro exitoso para:', e);
+      
+      Alert.alert(
+        '🎉 ¡Bienvenido a RecuerdaMed!', 
+        `Tu cuenta ha sido creada exitosamente.\n\n✅ Email: ${e}\n\n${data.user?.email_confirmed_at ? '¡Ya puedes iniciar sesión inmediatamente!' : 'Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.'}`,
+        [{ 
+          text: 'Perfecto', 
+          style: 'default',
+          onPress: () => {
+            // Limpiar los campos para que pueda hacer login
+            if (data.user?.email_confirmed_at) {
+              // Si ya está confirmado, mantener el email para facilitar el login
+              setPassword('');
+            }
+          }
+        }]
+      );
     } catch (err: any) {
       console.log('signUp error ->', err?.message);
-      Alert.alert('Error', err?.message ?? 'No se pudo registrar');
+      
+      if (err?.message?.includes('invalid')) {
+        Alert.alert('Email no válido', 'Por favor usa un email con dominio válido (ej: @gmail.com, @hotmail.com)');
+      } else if (err?.message?.includes('already')) {
+        Alert.alert(
+          '👤 Usuario ya registrado', 
+          `Este email ya tiene una cuenta en RecuerdaMed.\n\n📧 Email: ${e}\n\n¿Quieres iniciar sesión en su lugar?`,
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { 
+              text: 'Iniciar sesión', 
+              style: 'default',
+              onPress: () => {
+                // Mantener el email y limpiar la contraseña para facilitar el login
+                setPassword('');
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', err?.message ?? 'No se pudo registrar');
+      }
     } finally {
       setLoading(false);
     }
@@ -59,12 +103,50 @@ export default function LoginScreen({ navigation }: any) {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email: e, password: p });
-      if (error) throw error;
-      navigation.replace('Home');
+      console.log('🔑 Intentando login con:', e);
+      console.log('🔗 Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({ email: e, password: p });
+      
+      console.log('📊 Respuesta completa:', { data, error });
+      
+      if (error) {
+        console.log('❌ Error completo:', JSON.stringify(error, null, 2));
+        throw error;
+      }
+      
+      console.log('✅ Login exitoso, navegando a Home');
+      
+      // Mostrar alert de bienvenida antes de navegar
+      Alert.alert(
+        '✅ ¡Inicio de sesión exitoso!',
+        `¡Bienvenido de vuelta!\n\n👤 Usuario: ${data.user?.email}\n\n🎯 Accediendo a tu dashboard de medicamentos...`,
+        [{ 
+          text: 'Continuar', 
+          style: 'default',
+          onPress: () => navigation.replace('Home')
+        }]
+      );
     } catch (err: any) {
       console.log('signIn error ->', err?.message);
-      Alert.alert('Error', err?.message ?? 'No se pudo iniciar sesión');
+      console.log('Error status:', err?.status);
+      console.log('Error completo:', JSON.stringify(err, null, 2));
+      
+      if (err?.message?.includes('Invalid login credentials')) {
+        Alert.alert(
+          'Credenciales incorrectas', 
+          `Verifica tu email y contraseña. Error: ${err.message}`,
+          [{ text: 'Entendido', style: 'default' }]
+        );
+      } else if (err?.message?.includes('Email not confirmed')) {
+        Alert.alert(
+          'Email no confirmado', 
+          'Tu cuenta necesita ser confirmada. Revisa tu correo o contacta al administrador.',
+          [{ text: 'Entendido', style: 'default' }]
+        );
+      } else {
+        Alert.alert('Error', `${err?.message ?? 'No se pudo iniciar sesión'}\n\nDetalles técnicos: ${JSON.stringify(err, null, 2)}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -227,7 +309,7 @@ const styles = {
   },
   
   formContainer: {
-    width: '100%',
+    width: '100%' as import('react-native').DimensionValue,
     maxWidth: 400,
   },
   
