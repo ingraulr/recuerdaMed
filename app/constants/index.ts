@@ -1,5 +1,5 @@
 // constants/index.ts
-export * from './Colors';
-export * from './Typography';
-export * from './Layout';
-export * from './GlobalStyles';
+export * as Colors from './Colors';
+export * as Typography from './Typography';
+export * as Layout from './Layout';
+export * as GlobalStyles from './GlobalStyles';

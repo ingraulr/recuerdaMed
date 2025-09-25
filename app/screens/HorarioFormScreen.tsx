@@ -5,51 +5,12 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import { supabase } from '../lib/supabase';
 import { GlobalStyles, Colors, Layout, Typography } from '../constants/GlobalStyles';
 import TimePickerModal from '../components/TimePickerModal';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 type Medication = {
   id: string;
   name: string;
 };
-
-type FrequencyOption = {
-  id: string;
-  label: string;
-  hours: number[];
-  description: string;
-};
-
-const frequencyOptions: FrequencyOption[] = [
-  {
-    id: 'once_daily',
-    label: '1 vez al día',
-    hours: [8], // 8:00 AM
-    description: 'Una dosis diaria por la mañana'
-  },
-  {
-    id: 'twice_daily',
-    label: '2 veces al día (cada 12 hrs)',
-    hours: [8, 20], // 8:00 AM, 8:00 PM
-    description: 'Cada 12 horas'
-  },
-  {
-    id: 'three_times',
-    label: '3 veces al día (cada 8 hrs)',
-    hours: [8, 16, 0], // 8:00 AM, 4:00 PM, 12:00 AM
-    description: 'Cada 8 horas'
-  },
-  {
-    id: 'four_times',
-    label: '4 veces al día (cada 6 hrs)',
-    hours: [6, 12, 18, 0], // 6:00 AM, 12:00 PM, 6:00 PM, 12:00 AM
-    description: 'Cada 6 horas'
-  },
-  {
-    id: 'custom',
-    label: 'Horario personalizado',
-    hours: [],
-    description: 'Configura tus propios horarios'
-  }
-];
 
 export default function HorarioFormScreen() {
   const nav = useNavigation<any>();
@@ -58,7 +19,7 @@ export default function HorarioFormScreen() {
 
   const [medications, setMedications] = useState<Medication[]>([]);
   const [selectedMedication, setSelectedMedication] = useState<string>('');
-  const [selectedFrequency, setSelectedFrequency] = useState<string>('');
+
   const [customHours, setCustomHours] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingMedications, setLoadingMedications] = useState(true);
@@ -126,20 +87,11 @@ export default function HorarioFormScreen() {
     if (!selectedMedication) {
       return Alert.alert('Error', 'Selecciona un medicamento');
     }
-    if (!selectedFrequency) {
-      return Alert.alert('Error', 'Selecciona una frecuencia');
+    if (customHours.length === 0) {
+      return Alert.alert('Error', 'Agrega al menos un horario personalizado');
     }
 
-    const frequency = frequencyOptions.find(f => f.id === selectedFrequency);
-    if (!frequency) return;
-
-    let finalHours = frequency.hours;
-    if (selectedFrequency === 'custom') {
-      if (customHours.length === 0) {
-        return Alert.alert('Error', 'Agrega al menos un horario personalizado');
-      }
-      finalHours = customHours;
-    }
+    const finalHours = customHours;
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -195,9 +147,7 @@ export default function HorarioFormScreen() {
 
       {/* Indicador de carga */}
       {loadingMedications && (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>⏳ Cargando medicamentos...</Text>
-        </View>
+        <LoadingAnimation message="Cargando medicamentos..." size="medium" />
       )}
 
       {/* Selección de medicamento */}
@@ -288,51 +238,8 @@ export default function HorarioFormScreen() {
         </>
       )}
 
-      {/* Selección de frecuencia */}
-      {medications.length > 0 && selectedMedication && (
-        <View style={{ marginBottom: 20 }}>
-          <Text style={GlobalStyles.label}>Frecuencia del medicamento</Text>
-          <View style={styles.frequencyGrid}>
-            {frequencyOptions.map(option => (
-              <TouchableOpacity
-                key={option.id}
-                style={[
-                  styles.frequencyOption,
-                  selectedFrequency === option.id ? styles.frequencyOptionSelected : {}
-                ]}
-                onPress={() => {
-                  setSelectedFrequency(option.id);
-                  setDropdownOpen(false); // Cerrar dropdown si está abierto
-                }}
-              >
-                <Text style={[
-                  styles.frequencyLabel,
-                  selectedFrequency === option.id ? styles.frequencyLabelSelected : {}
-                ]}>
-                  {option.label}
-                </Text>
-                <Text style={[
-                  styles.frequencyDescription,
-                  selectedFrequency === option.id ? styles.frequencyDescriptionSelected : {}
-                ]}>
-                  {option.description}
-                </Text>
-                {option.hours.length > 0 && (
-                  <Text style={[
-                    styles.frequencyTimes,
-                    selectedFrequency === option.id ? styles.frequencyTimesSelected : {}
-                  ]}>
-                    {option.hours.map(formatHour).join(' • ')}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-
       {/* Horarios personalizados */}
-      {selectedFrequency === 'custom' && (
+      {medications.length > 0 && selectedMedication && (
         <View style={styles.customScheduleContainer}>
           <Text style={GlobalStyles.label}>Tus horarios personalizados</Text>
           
@@ -373,7 +280,7 @@ export default function HorarioFormScreen() {
 
       {/* Botón guardar - siempre visible */}
       <View style={styles.saveSection}>
-        {selectedMedication && selectedFrequency && (
+        {selectedMedication && (
           <TouchableOpacity
             style={[styles.saveButton, saving && { opacity: 0.6 }]}
             onPress={save}
@@ -385,10 +292,10 @@ export default function HorarioFormScreen() {
           </TouchableOpacity>
         )}
 
-        {(!selectedMedication || !selectedFrequency) && medications.length > 0 && (
+        {!selectedMedication && medications.length > 0 && (
           <View style={styles.incompleteContainer}>
             <Text style={styles.incompleteText}>
-              {!selectedMedication ? '👆 Selecciona un medicamento' : '👆 Elige la frecuencia'}
+              👆 Selecciona un medicamento
             </Text>
           </View>
         )}

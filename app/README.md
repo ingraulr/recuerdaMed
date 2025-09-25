@@ -1,50 +1,80 @@
-# Welcome to your Expo app 👋
+# RecuerdaMed 🩺💊
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)
+![React Native](https://img.shields.io/badge/React%20Native-0.7x-61dafb?logo=react&logoColor=black)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres-3fcf8e?logo=supabase&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-black)
+![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088ff?logo=githubactions&logoColor=white)
 
-## Get started
+> **RecuerdaMed** es una app móvil para **gestionar medicamentos, horarios y tomas** (doses). Soporta múltiples horarios, zona horaria por usuario y estados de toma con Supabase (Postgres + RLS).
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## 🧭 Índice
 
-2. Start the app
+- [✨ Funcionalidades](#-funcionalidades)
+- [🧱 Stack](#-stack)
+- [🏗️ Arquitectura](#️-arquitectura)
+- [🚀 Inicio Rápido](#-inicio-rápido)
+- [⚙️ Variables de Entorno](#️-variables-de-entorno)
+- [🗄️ Esquema & RPC](#️-esquema--rpc)
+- [🧪 Pruebas](#-pruebas)
+- [🧹 Calidad de Código](#-calidad-de-código)
+- [🛠️ Scripts](#️-scripts)
+- [📦 Estructura del Repo](#-estructura-del-repo)
+- [🗺️ Roadmap](#️-roadmap)
+- [🤝 Contribuir](#-contribuir)
+- [📄 Licencia](#-licencia)
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## ✨ Funcionalidades
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- 👤 Autenticación con Supabase.
+- 💊 CRUD de **Medicamentos**.
+- ⏰ **Horarios** con `fixed_times` (time[]) y TZ por usuario.
+- ✅ Registro de **tomas** (doses) con estados (p. ej. *completed*).
+- 🧮 **Dashboard** del día: tomados, pendientes y total.
+- 🔔 (Próximo) Notificaciones locales por horario.
+- 👪 (Opcional) **Cuidadores** con acceso delegado (políticas RLS).
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
+## 🧱 Stack
 
-When you're ready, run:
+- **App**: React Native + TypeScript.
+- **Backend**: Supabase (Postgres, Row Level Security, RPC).
+- **Estado/Networking**: Supabase JS Client; (opcional) Zustand/React Query.
+- **Pruebas**: Jest/RTL (unit), Playwright (E2E web si aplica), Appium (E2E móvil opcional).
+- **CI/CD**: GitHub Actions.
 
-```bash
-npm run reset-project
-```
+---
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🏗️ Arquitectura
 
-## Learn more
+```mermaid
+flowchart LR
+  A[App RN (Home, Medicamentos, Horarios, Historial)] -- Supabase JS --> B((Supabase))
+  subgraph B[Supabase / Postgres]
+    M[medications]
+    S[schedules]
+    D[doses]
+    R[(RLS Policies)]
+    F[RPC: home_dashboard]
+  end
+  C[(Auth)] --> B
+  A <-- Realtime/Queries --> M & S & D
+  A --> F
 
-To learn more about developing your project with Expo, look at the following resources:
+  sequenceDiagram
+  participant U as Usuario
+  participant App as App RN
+  participant DB as Supabase (doses)
+  U->>App: Tap "Marcar como tomado"
+  App->>DB: UPDATE doses SET status='completed' WHERE id=next
+  DB-->>App: 200 OK
+  App->>App: UI optimista (taken++, pending--)
+  App->>DB: RPC home_dashboard()
+  DB-->>App: next/taken/pending/total
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+  

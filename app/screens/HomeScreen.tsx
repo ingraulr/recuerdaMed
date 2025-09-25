@@ -19,6 +19,7 @@ import { Typography } from '../constants/Typography';
 
 // Ajusta la ruta según tu proyecto
 import { supabase } from '../lib/supabase';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 // Tipos para los datos
 type MedicationSchedule = {
@@ -50,6 +51,7 @@ export default function HomeScreen() {
   const [todayStats, setTodayStats] = useState<TodayStats>({ taken: 0, pending: 0, total: 0 });
   const [nextMedication, setNextMedication] = useState<NextMedication>(null);
   const [dataLoading, setDataLoading] = useState(true);
+  const [userName, setUserName] = useState<string>('');
 
   async function logout() {
     Alert.alert(
@@ -76,6 +78,17 @@ export default function HomeScreen() {
     );
   }
 
+  // Función para extraer el nombre del email
+  const extractNameFromEmail = (email: string): string => {
+    const nameFromEmail = email.split('@')[0];
+    // Capitalizar la primera letra y reemplazar puntos/guiones por espacios
+    return nameFromEmail
+      .replace(/[._-]/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   // Función para obtener los horarios de hoy
   const loadTodayData = React.useCallback(async () => {
     try {
@@ -83,6 +96,12 @@ export default function HomeScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) return;
+
+      // Extraer y establecer el nombre del usuario desde el email
+      if (user.email) {
+        const extractedName = extractNameFromEmail(user.email);
+        setUserName(extractedName);
+      }
 
       // Obtener todos los horarios del usuario con información del medicamento
       const { data: schedules, error } = await supabase
@@ -308,13 +327,18 @@ export default function HomeScreen() {
     [],
   );
 
+  // Mostrar pantalla de carga inicial
+  if (dataLoading && !nextMedication && todayStats.total === 0) {
+    return <LoadingAnimation message="Cargando tu información..." size="large" />;
+  }
+
   return (
     <SafeAreaView style={GlobalStyles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Header con saludo y logout */}
         <View style={styles.headerContainer}>
           <View style={styles.greetingSection}>
-            <Text style={styles.greetingText}>¡Hola! 👋</Text>
+            <Text style={styles.greetingText}>¡Hola{userName ? `, ${userName}` : ''}! 👋</Text>
             <Text style={GlobalStyles.welcomeText}>Bienvenido a RecuerdaMed</Text>
             <Text style={styles.dateText}>{formattedDate}</Text>
           </View>
