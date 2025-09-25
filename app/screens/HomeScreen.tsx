@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 // Import individual constants
 import { GlobalStyles } from '../constants/GlobalStyles';
@@ -20,9 +20,36 @@ import { Typography } from '../constants/Typography';
 // Ajusta la ruta según tu proyecto
 import { supabase } from '../lib/supabase';
 
+// Tipos para los datos
+type MedicationSchedule = {
+  id: string;
+  medication_id: string;
+  fixed_times: string[];
+  medication_name: string;
+  dose?: number;
+  unit?: string;
+};
+
+type TodayStats = {
+  taken: number;
+  pending: number;
+  total: number;
+};
+
+type NextMedication = {
+  name: string;
+  time: string;
+  dose: string;
+  scheduleId: string;
+  medicationId: string;
+} | null;
+
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(false);
+  const [todayStats, setTodayStats] = useState<TodayStats>({ taken: 0, pending: 0, total: 0 });
+  const [nextMedication, setNextMedication] = useState<NextMedication>(null);
+  const [dataLoading, setDataLoading] = useState(true);
 
   async function logout() {
     Alert.alert(
@@ -49,18 +76,226 @@ export default function HomeScreen() {
     );
   }
 
-  // Datos de ejemplo para mostrar funcionalidades futuras
-  const nextMedication = {
-    name: 'Vitamina D',
-    time: '2:00 PM',
-    dose: '1 pastilla',
-  };
+  // Función para obtener los horarios de hoy
+  const loadTodayData = React.useCallback(async () => {
+    try {
+      setDataLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return;
 
-  const todayStats = {
-    taken: 3,
-    pending: 1,
-    total: 4,
-  };
+      // Obtener todos los horarios del usuario con información del medicamento
+      const { data: schedules, error } = await supabase
+        .from('schedules')
+        .select(`
+          id,
+          medication_id,
+          fixed_times,
+          medications (
+            name,
+            dose,
+            unit
+          )
+        `)
+        .eq('patient_user_id', user.id);
+
+      if (error) {
+        console.error('Error loading schedules:', error);
+        return;
+      }
+
+      // Procesar los horarios para hoy
+      const schedulesWithMedication: MedicationSchedule[] = (schedules || []).map(schedule => {
+        const medication = Array.isArray(schedule.medications) 
+          ? schedule.medications[0] 
+          : schedule.medications;
+        
+        return {
+          id: schedule.id,
+          medication_id: schedule.medication_id,
+          fixed_times: schedule.fixed_times || [],
+          medication_name: medication?.name || 'Medicamento',
+          dose: medication?.dose || undefined,
+          unit: medication?.unit || undefined,
+        };
+      });
+
+      // Función helper para formatear la hora
+      const formatTime = (hours: number, minutes: number): string => {
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours;
+        const displayMinutes = minutes.toString().padStart(2, '0');
+        return `${displayHours}:${displayMinutes} ${period}`;
+      };
+
+      // Función para calcular las estadísticas del día
+      const calculateTodayStats = async (schedules: MedicationSchedule[]) => {
+        let total = 0;
+        
+        // Contar total de dosis programadas para hoy
+        schedules.forEach(schedule => {
+          total += schedule.fixed_times.length;
+        });
+
+        // Obtener dosis ya tomadas hoy
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const { data: takenDoses, error } = await supabase
+          .from('doses')
+          .select('*')
+          .eq('patient_user_id', user.id)
+          .gte('planned_at', `${today}T00:00:00.000Z`)
+          .lte('planned_at', `${today}T23:59:59.999Z`)
+          .eq('status', 'done');
+
+        if (error) {
+          console.error('Error fetching taken doses:', error);
+        }
+
+        const taken = takenDoses?.length || 0;
+        const pending = total - taken;
+
+        setTodayStats({
+          taken,
+          pending,
+          total
+        });
+      };
+
+      // Función para encontrar el próximo medicamento
+      const findNextMedication = async (schedules: MedicationSchedule[]) => {
+        const now = new Date();
+        const currentTime = now.getHours() * 60 + now.getMinutes();
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        
+        // Obtener las dosis ya tomadas hoy para filtrarlas
+        const { data: takenDoses, error } = await supabase
+          .from('doses')
+          .select('schedule_id, planned_at')
+          .eq('patient_user_id', user.id)
+          .gte('planned_at', `${today}T00:00:00.000Z`)
+          .lte('planned_at', `${today}T23:59:59.999Z`)
+          .eq('status', 'done');
+
+        if (error) {
+          console.error('Error fetching taken doses for next medication:', error);
+        }
+
+        // Crear set de schedule_ids ya tomados para búsqueda rápida
+        const takenScheduleIds = new Set(
+          (takenDoses || []).map(dose => dose.schedule_id)
+        );
+        
+        let nextMed: NextMedication | null = null;
+        let nextTime = Infinity;
+
+        schedules.forEach(schedule => {
+          // Verificar si este schedule ya tiene dosis tomadas hoy
+          const hasTakenDoses = takenScheduleIds.has(schedule.id);
+          
+          schedule.fixed_times.forEach(timeStr => {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            const scheduleTime = hours * 60 + minutes;
+            
+            // Si es un horario futuro del día de hoy y no tiene dosis tomadas
+            if (scheduleTime > currentTime && 
+                scheduleTime < nextTime && 
+                !hasTakenDoses) {
+              nextTime = scheduleTime;
+              const dose = schedule.dose ? `${schedule.dose} ${schedule.unit || ''}` : '1 dosis';
+              
+              nextMed = {
+                name: schedule.medication_name,
+                time: formatTime(hours, minutes),
+                dose: dose.trim(),
+                scheduleId: schedule.id,
+                medicationId: schedule.medication_id
+              };
+            }
+          });
+        });
+
+        setNextMedication(nextMed);
+      };
+
+      // Calcular estadísticas y próximo medicamento
+      await calculateTodayStats(schedulesWithMedication);
+      await findNextMedication(schedulesWithMedication);
+
+    } catch (error) {
+      console.error('Error loading today data:', error);
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  const markAsTaken = React.useCallback(async () => {
+    if (!nextMedication) return;
+
+    // Mostrar confirmación
+    const confirmResult = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        '💊 Confirmar medicamento tomado',
+        `¿Confirmas que has tomado ${nextMedication.name} (${nextMedication.dose}) a las ${nextMedication.time}?`,
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+            onPress: () => resolve(false),
+          },
+          {
+            text: '✅ Sí, lo tomé',
+            style: 'default',
+            onPress: () => resolve(true),
+          },
+        ]
+      );
+    });
+
+    if (!confirmResult) return;
+
+    try {
+      setDataLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return;
+
+      // Registrar la dosis como tomada en la tabla doses
+      const now = new Date();
+      const { error } = await supabase
+        .from('doses')
+        .insert({
+          patient_user_id: user.id,
+          schedule_id: nextMedication.scheduleId,
+          planned_at: now.toISOString(), // Hora en que se tomó
+          status: 'done'
+        });
+
+      if (error) {
+        console.error('Error marking medication as taken:', error);
+        return;
+      }
+
+      // Recargar los datos para actualizar estadísticas y próximo medicamento
+      await loadTodayData();
+
+      // Mostrar mensaje de éxito
+      Alert.alert(
+        '🎉 ¡Excelente!',
+        `Has marcado correctamente que tomaste ${nextMedication.name}`,
+        [{ text: 'OK', style: 'default' }]
+      );
+      
+    } catch (error) {
+      console.error('Error in markAsTaken:', error);
+    }
+  }, [nextMedication, loadTodayData]);
+
+  // Cargar datos cuando se monta el componente y cuando regresa el foco
+  useFocusEffect(
+    React.useCallback(() => {
+      loadTodayData();
+    }, [loadTodayData])
+  );
 
   const formattedDate = useMemo(
     () =>
@@ -76,12 +311,23 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={GlobalStyles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Header con saludo */}
+        {/* Header con saludo y logout */}
         <View style={styles.headerContainer}>
           <View style={styles.greetingSection}>
             <Text style={styles.greetingText}>¡Hola! 👋</Text>
             <Text style={GlobalStyles.welcomeText}>Bienvenido a RecuerdaMed</Text>
             <Text style={styles.dateText}>{formattedDate}</Text>
+          </View>
+          <View style={styles.logoutSection}>
+            <Text style={styles.logoutLabel}>Cerrar sesión</Text>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={logout}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.logoutIcon}>{loading ? '⏳' : '🚪'}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -91,15 +337,41 @@ export default function HomeScreen() {
             <Text style={styles.cardIcon}>⏰</Text>
             <Text style={styles.cardTitle}>Próximo medicamento</Text>
           </View>
-          <View style={styles.medicationInfo}>
-            <Text style={styles.medicationName}>{nextMedication.name}</Text>
-            <Text style={styles.medicationDetails}>
-              {nextMedication.time} • {nextMedication.dose}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.reminderButton} activeOpacity={0.8}>
-            <Text style={styles.reminderButtonText}>Marcar como tomado</Text>
-          </TouchableOpacity>
+          {nextMedication ? (
+            <>
+              <View style={styles.medicationInfo}>
+                <Text style={styles.medicationName}>{nextMedication.name}</Text>
+                <Text style={styles.medicationDetails}>
+                  {nextMedication.time} • {nextMedication.dose}
+                </Text>
+              </View>
+              <TouchableOpacity 
+                style={[
+                  styles.reminderButton,
+                  dataLoading && styles.reminderButtonDisabled
+                ]} 
+                activeOpacity={dataLoading ? 1 : 0.8}
+                onPress={markAsTaken}
+                disabled={dataLoading}
+              >
+                <Text style={[
+                  styles.reminderButtonText,
+                  dataLoading && styles.reminderButtonTextDisabled
+                ]}>
+                  {dataLoading ? '⏳ Marcando...' : '✅ Marcar como tomado'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={styles.noMedicationContainer}>
+              <Text style={styles.noMedicationText}>
+                {dataLoading ? '⏳ Cargando...' : '🎉 ¡No hay más medicamentos por hoy!'}
+              </Text>
+              <Text style={styles.noMedicationSubtext}>
+                {dataLoading ? 'Obteniendo tus horarios...' : 'Has completado todos los horarios del día'}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Estadísticas del día */}
@@ -137,11 +409,19 @@ export default function HomeScreen() {
             <Text style={styles.cardTitle}>Acciones rápidas</Text>
           </View>
           <View style={styles.quickActionsContainer}>
-            <TouchableOpacity style={styles.quickActionButton} activeOpacity={0.8}>
+            <TouchableOpacity 
+              style={styles.quickActionButton} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Medicamentos')}
+            >
               <Text style={styles.quickActionIcon}>💊</Text>
               <Text style={styles.quickActionText}>Mis medicamentos</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionButton} activeOpacity={0.8}>
+            <TouchableOpacity 
+              style={styles.quickActionButton} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Horarios')}
+            >
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Horarios</Text>
             </TouchableOpacity>
@@ -149,36 +429,18 @@ export default function HomeScreen() {
               <Text style={styles.quickActionIcon}>📱</Text>
               <Text style={styles.quickActionText}>Recordatorios</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionButton} activeOpacity={0.8}>
+            <TouchableOpacity 
+              style={styles.quickActionButton} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Historial')}
+            >
               <Text style={styles.quickActionIcon}>📈</Text>
               <Text style={styles.quickActionText}>Historial</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Botón de cerrar sesión */}
-        <View style={styles.logoutContainer}>
-          <TouchableOpacity
-            style={[
-              GlobalStyles.button,
-              GlobalStyles.buttonSecondary,
-              loading && GlobalStyles.buttonDisabled,
-            ]}
-            onPress={logout}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                GlobalStyles.buttonText,
-                GlobalStyles.buttonTextSecondary,
-                loading && GlobalStyles.buttonTextDisabled,
-              ]}
-            >
-              {loading ? 'Cerrando sesión...' : 'Cerrar sesión'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -192,10 +454,39 @@ const styles = StyleSheet.create({
 
   headerContainer: {
     marginBottom: Layout.spacing.xl,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
 
   greetingSection: {
-    // Personaliza si necesitas
+    flex: 1,
+  },
+
+  logoutSection: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+
+  logoutLabel: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textLight,
+    marginBottom: 4,
+    fontWeight: Typography.weights.medium,
+  },
+
+  logoutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Layout.shadow.small,
+  },
+
+  logoutIcon: {
+    fontSize: Typography.sizes.lg,
   },
 
   greetingText: {
@@ -259,9 +550,19 @@ const styles = StyleSheet.create({
   },
 
   reminderButtonText: {
-    color: Colors.primary,
+    color: Colors.textOnPrimary,
     fontSize: Typography.sizes.sm,
     fontWeight: '600',
+  },
+
+  reminderButtonDisabled: {
+    backgroundColor: Colors.textSecondary,
+    opacity: 0.6,
+  },
+
+  reminderButtonTextDisabled: {
+    color: Colors.textOnPrimary,
+    opacity: 0.8,
   },
 
   statsContainer: {
@@ -315,8 +616,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  logoutContainer: {
-    marginTop: Layout.spacing.md,
-    marginBottom: Layout.spacing['3xl'],
+  noMedicationContainer: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+  },
+
+  noMedicationText: {
+    fontSize: Typography.sizes.base,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+
+  noMedicationSubtext: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: Typography.sizes.sm * 1.4,
   },
 });
