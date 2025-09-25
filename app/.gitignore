@@ -30,11 +30,70 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# Environment Variables - NUNCA subir al repo
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.test
+.env.*.local
+
+# Permitir archivos de ejemplo
+!.env.example
 
 # typescript
 *.tsbuildinfo
+
+# Credenciales y Configuración Sensible
+google-services.json
+GoogleService-Info.plist
+secrets.json
+config.json
+firebase-config.js
+supabase-config.js
+
+# Archivos de autenticación y llaves
+*.key
+*.keystore
+*.jks
+*.p12
+*.p8
+*.cer
+*.crt
+*.provisionprofile
+*.mobileprovision
+
+# Logs y archivos temporales
+*.log
+logs/
+*.tmp
+*.temp
+temp/
+.cache/
+.tmp/
+
+# IDE y editores
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos del sistema
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Backups y archivos temporales del proyecto
+*.backup
+*.bak
+*.orig
+*~
 
 app-example
 

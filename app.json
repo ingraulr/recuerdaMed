@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "a6a3671a-63e3-4f71-990f-ee18993b9574"
+      }
+    },
+    "android": {
+      "package": "com.recuerdamed.app"
+    }
+  }
+}
