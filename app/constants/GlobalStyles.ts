@@ -32,6 +32,16 @@ export const GlobalStyles = StyleSheet.create({
     padding: Layout.padding.card,
     ...Layout.shadow.medium,
   },
+
+  medicationCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Layout.borderRadius.lg,
+    paddingVertical: Layout.spacing['2xl'], // Mucho más padding arriba y abajo
+    paddingHorizontal: Layout.spacing['2xl'], // Mucho más padding a los lados
+    marginHorizontal: Layout.spacing.lg, // Mayor margen lateral
+    marginVertical: Layout.spacing.md, // Margen vertical entre tarjetas
+    ...Layout.shadow.medium,
+  },
   
   surface: {
     backgroundColor: Colors.surface,
@@ -60,7 +70,7 @@ export const GlobalStyles = StyleSheet.create({
     color: Colors.textSecondary,
     lineHeight: Typography.lineHeights.relaxed * Typography.sizes.base,
   },
-  
+
   welcomeText: {
     fontSize: Typography.sizes.xl,
     fontWeight: Typography.weights.medium,
@@ -68,7 +78,35 @@ export const GlobalStyles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: Layout.spacing.lg,
   },
-  
+
+  // Etiquetas para formularios
+  label: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textPrimary,
+    marginBottom: Layout.spacing.sm,
+  },
+
+  // Texto muted (gris claro)
+  muted: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.normal,
+    color: Colors.textLight,
+  },
+
+  // Tag de advertencia
+  warningTag: {
+    backgroundColor: Colors.error,
+    color: Colors.textOnPrimary,
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.medium,
+    paddingVertical: Layout.spacing.sm,
+    paddingHorizontal: Layout.spacing.md,
+    borderRadius: Layout.borderRadius.md,
+    textAlign: 'center',
+    overflow: 'hidden',
+  },
+
   // Inputs
   input: {
     height: Layout.input.height,
@@ -167,4 +205,26 @@ export const GlobalStyles = StyleSheet.create({
     ...Layout.shadow.small,
     opacity: 0.7,
   },
+
+  // FAB (Floating Action Button)
+  fab: {
+    position: 'absolute',
+    bottom: Layout.spacing.xl,
+    right: Layout.spacing.xl,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Layout.shadow.large,
+  },
+
+  fabText: {
+    fontSize: 24,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textOnPrimary,
+  },
 });
+
+export { Typography, Colors, Layout };
