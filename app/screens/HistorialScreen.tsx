@@ -5,7 +5,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   SafeAreaView,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -14,6 +13,7 @@ import { GlobalStyles } from '../constants/GlobalStyles';
 import { Colors } from '../constants/Colors';
 import { Typography } from '../constants/Typography';
 import { Layout } from '../constants/Layout';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 // Tipos para el historial
 interface HistorialDose {
@@ -206,10 +206,7 @@ export default function HistorialScreen() {
 
       {/* Contenido */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Cargando historial...</Text>
-        </View>
+        <LoadingAnimation message="Cargando historial..." size="medium" />
       ) : (
         <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           {Object.keys(groupedHistory).length === 0 ? (

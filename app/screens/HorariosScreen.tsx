@@ -1,36 +1,37 @@
 // app/screens/HorariosScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Alert, StyleSheet, Modal, ScrollView } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Alert, StyleSheet, ScrollView, Modal } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { GlobalStyles, Colors, Layout, Typography } from '../constants/GlobalStyles';
 import TimePickerModal from '../components/TimePickerModal';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 type Row = { id: string; medication_id: string; tz: string | null; fixed_times: string[] | null; medication_name: string };
 
 export default function HorariosScreen() {
   const navigation = useNavigation<any>();
   const [rows, setRows] = useState<Row[]>([]);
-  const [meds, setMeds] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showTimeModal, setShowTimeModal] = useState(false);
-  const [showCustomModal, setShowCustomModal] = useState(false);
-  const [selectedMedication, setSelectedMedication] = useState<{ id: string; name: string } | null>(null);
-  const [selectedTimesPerDay, setSelectedTimesPerDay] = useState(1);
-  const [showMedicationDropdown, setShowMedicationDropdown] = useState(false);
-  const [showQuickModal, setShowQuickModal] = useState(false);
-  const [quickScheduleFrequency, setQuickScheduleFrequency] = useState<number>(1);
+  const [meds, setMeds] = useState<{ id: string; name: string }[]>([]);
+  const [showFrequencyModal, setShowFrequencyModal] = useState(false);
+  const [selectedMed, setSelectedMed] = useState<string>('');
+  const [selectedFrequency, setSelectedFrequency] = useState(0);
+  const [showTimePickerModal, setShowTimePickerModal] = useState(false);
+  const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
+  const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
+
 
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      const medsRes = await supabase.from('medications').select('id,name').eq('patient_user_id', user!.id);
+      const medRes = await supabase.from('medications').select('*').eq('patient_user_id', user!.id);
+      setMeds(medRes.data ?? []);
       const schRes = await supabase
         .from('schedules')
         .select('id, medication_id, tz, fixed_times, medications(name)')
         .eq('patient_user_id', user!.id)
         .order('created_at', { ascending: false });
-      setMeds((medsRes.data ?? []) as any);
       const mapped = (schRes.data ?? []).map((r: any) => ({
         id: r.id, medication_id: r.medication_id, tz: r.tz, fixed_times: r.fixed_times,
         medication_name: r.medications?.name ?? '',
@@ -40,106 +41,11 @@ export default function HorariosScreen() {
     })();
   }, []);
 
-  function calculateScheduleTimes(timesPerDay: number, firstHour: number): string[] {
-    const times: string[] = [];
-    const hoursInterval = 24 / timesPerDay;
-    
-    for (let i = 0; i < timesPerDay; i++) {
-      const hour = (firstHour + (hoursInterval * i)) % 24;
-      const h = Math.floor(hour).toString().padStart(2, '0');
-      times.push(`${h}:00:00`);
-    }
-    
-    return times.sort();
-  }
+  
 
-  function formatHourDisplay(hour: number): string {
-    if (hour === 0) return '12:00 AM';
-    if (hour < 12) return `${hour}:00 AM`;
-    if (hour === 12) return '12:00 PM';
-    return `${hour - 12}:00 PM`;
-  }
 
-  async function createQuickSchedule(timesPerDay: number) {
-    if (!meds.length) {
-      return Alert.alert('Medicamentos necesarios', 'Primero crea un medicamento antes de configurar horarios.');
-    }
 
-    // Seleccionar medicamento si hay varios
-    if (meds.length === 1) {
-      askForFirstDose(meds[0], timesPerDay);
-    } else {
-      // Mostrar modal para seleccionar medicamento
-      setQuickScheduleFrequency(timesPerDay);
-      setSelectedMedication(null);
-      setShowMedicationDropdown(false);
-      setShowQuickModal(true);
-    }
-  }
 
-  function selectMedicationForQuickSchedule(medication: { id: string; name: string }) {
-    askForFirstDose(medication, quickScheduleFrequency);
-    setShowQuickModal(false);
-  }
-
-  function askForFirstDose(medication: { id: string; name: string }, timesPerDay: number) {
-    setSelectedMedication(medication);
-    setSelectedTimesPerDay(timesPerDay);
-    setShowTimeModal(true);
-  }
-
-  function handleTimeSelection(hour: number) {
-    if (!selectedMedication) return;
-    
-    const times = calculateScheduleTimes(selectedTimesPerDay, hour);
-    const frequencyText = getFrequencyText(selectedTimesPerDay);
-    const timeDisplays = times.map(time => {
-      const h = parseInt(time.split(':')[0]);
-      return formatHourDisplay(h);
-    }).join(', ');
-    
-    setShowTimeModal(false);
-    
-    Alert.alert(
-      'Confirmar horarios',
-      `${selectedMedication.name}\nFrecuencia: ${frequencyText}\nHorarios: ${timeDisplays}\n\n¿Confirmas este horario?`,
-      [
-        { text: '❌ Cancelar', style: 'cancel' },
-        { 
-          text: '✅ Confirmar', 
-          onPress: () => saveQuickSchedule(selectedMedication.id, times)
-        }
-      ]
-    );
-  }
-
-  function getFrequencyText(timesPerDay: number): string {
-    switch(timesPerDay) {
-      case 1: return '1 vez al día';
-      case 2: return '2 veces al día (cada 12h)';
-      case 3: return '3 veces al día (cada 8h)';
-      case 4: return '4 veces al día (cada 6h)';
-      default: return `${timesPerDay} veces al día`;
-    }
-  }
-
-  async function saveQuickSchedule(medicationId: string, times: string[]) {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const { error } = await supabase.from('schedules').insert({
-      patient_user_id: (await supabase.auth.getUser()).data.user!.id,
-      medication_id: medicationId,
-      tz,
-      fixed_times: times,
-      tolerance_minutes: 30,
-    });
-    
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
-      Alert.alert('¡Listo!', 'Horario configurado correctamente');
-      await reloadSchedules();
-    }
-  }
 
   async function reloadSchedules() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -155,6 +61,69 @@ export default function HorariosScreen() {
     setRows(mapped);
   }
 
+  function handleTimeSelection(medId: string, frequency: number) {
+    setSelectedMed(medId);
+    setSelectedFrequency(frequency);
+    setShowFrequencyModal(false);
+    setShowTimePickerModal(true);
+  }
+
+  function getFrequencyText(freq: number): string {
+    const texts = ['Una vez al día', 'Dos veces al día', 'Tres veces al día', 'Cuatro veces al día'];
+    return texts[freq] || `${freq + 1} veces al día`;
+  }
+
+  async function saveQuickSchedule(times: string[]) {
+    if (!selectedMed) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase
+        .from('schedules')
+        .insert({
+          medication_id: selectedMed,
+          patient_user_id: user!.id,
+          fixed_times: times,
+        });
+
+      if (error) throw error;
+
+      Alert.alert('✅ Horario guardado', 'Tu horario se ha configurado correctamente');
+      setShowTimePickerModal(false);
+      setSelectedMed('');
+      setSelectedTimes([]);
+      await reloadSchedules();
+    } catch (error: any) {
+      Alert.alert('❌ Error', error.message);
+    }
+  }
+
+  function calculateScheduleTimes(frequency: number): string[] {
+    const baseHour = 8; // Comenzar a las 8 AM
+    const interval = Math.floor(12 / (frequency + 1)); // Distribuir en 12 horas (8 AM - 8 PM)
+    
+    const times: string[] = [];
+    for (let i = 0; i <= frequency; i++) {
+      const hour = baseHour + (i * interval);
+      const timeString = `${hour.toString().padStart(2, '0')}:00`;
+      times.push(timeString);
+    }
+    
+    return times;
+  }
+
+  function formatHourDisplay(times: string[]): string {
+    if (!times || times.length === 0) return 'Sin horarios';
+    return times.map(time => {
+      const [hour, minute] = time.split(':');
+      const hourNum = parseInt(hour);
+      const ampm = hourNum >= 12 ? 'PM' : 'AM';
+      const displayHour = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum;
+      return `${displayHour}:${minute} ${ampm}`;
+    }).join(', ');
+  }
+
   function formatTimezone(tz: string | null): string {
     if (!tz) return 'Sin zona horaria';
     
@@ -168,12 +137,19 @@ export default function HorariosScreen() {
 
   function editSchedule(item: Row) {
     Alert.alert(
-      'Editar horario',
-      `¿Qué quieres hacer con el horario de ${item.medication_name}?`,
+      'Editar medicamento',
+      `¿Qué quieres hacer con ${item.medication_name}?`,
       [
         { text: '❌ Cancelar', style: 'cancel' },
         { 
-          text: '✏️ Editar tiempos', 
+          text: '💊 Editar medicamento', 
+          onPress: () => navigation.navigate('MedicationForm', { 
+            medicationId: item.medication_id,
+            onSaved: reloadSchedules
+          })
+        },
+        { 
+          text: '⏰ Editar horarios', 
           onPress: () => navigation.navigate('HorarioForm', { 
             scheduleId: item.id,
             medicationId: item.medication_id 
@@ -210,66 +186,47 @@ export default function HorariosScreen() {
     );
   }
 
-  if (loading) return <View style={GlobalStyles.center}><Text>Cargando…</Text></View>;
+  if (loading) return <LoadingAnimation message="Cargando horarios..." size="large" />;
 
   return (
     <ScrollView style={GlobalStyles.contentContainer} showsVerticalScrollIndicator={false}>
-      {/* Menú de acceso rápido */}
+      {/* Menú de configuración rápida */}
       <View style={styles.quickMenu}>
-        <Text style={styles.quickMenuTitle}>⏰⚡ Horarios Rápidos</Text>
-        <Text style={styles.quickMenuSubtitle}>Configura horarios comunes en segundos</Text>
+        <Text style={styles.quickMenuTitle}>💊 Configurar Horarios</Text>
+        <Text style={styles.quickMenuSubtitle}>Elige la frecuencia de tu medicamento</Text>
         
-        <View style={styles.quickButtonsGrid}>
-          <TouchableOpacity 
-            style={styles.quickButton} 
-            onPress={() => createQuickSchedule(1)}
-          >
-            <Text style={styles.quickButtonEmoji}>🌅</Text>
-            <Text style={styles.quickButtonText}>1 vez al día</Text>
-            <Text style={styles.quickButtonDetail}>Por la mañana</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.quickButton} 
-            onPress={() => createQuickSchedule(2)}
-          >
-            <Text style={styles.quickButtonEmoji}>🌅🌙</Text>
-            <Text style={styles.quickButtonText}>2 veces al día</Text>
-            <Text style={styles.quickButtonDetail}>Cada 12 horas</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.quickButton} 
-            onPress={() => createQuickSchedule(3)}
-          >
-            <Text style={styles.quickButtonEmoji}>🌅🌞🌙</Text>
-            <Text style={styles.quickButtonText}>3 veces al día</Text>
-            <Text style={styles.quickButtonDetail}>Cada 8 horas</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.quickButton} 
-            onPress={() => createQuickSchedule(4)}
-          >
-            <Text style={styles.quickButtonEmoji}>🌅🌞🌆🌙</Text>
-            <Text style={styles.quickButtonText}>4 veces al día</Text>
-            <Text style={styles.quickButtonDetail}>Cada 6 horas</Text>
-          </TouchableOpacity>
+        {/* Botones de frecuencia */}
+        <View style={styles.frequencyGrid}>
+          {[
+            { frequency: 0, icon: '🌅', time: '8:00 AM' },
+            { frequency: 1, icon: '🌅🌙', time: '8:00 AM • 8:00 PM' },
+            { frequency: 2, icon: '🌅🌆🌙', time: '8:00 AM • 4:00 PM • 12:00 AM' },
+            { frequency: 3, icon: '🌅🌤️🌆🌙', time: '6:00 AM • 12:00 PM • 6:00 PM • 12:00 AM' }
+          ].map(({ frequency, icon, time }) => (
+            <TouchableOpacity 
+              key={frequency}
+              style={styles.frequencyOption}
+              onPress={() => {
+                setSelectedFrequency(frequency);
+                setShowFrequencyModal(true);
+              }}
+            >
+              <Text style={[GlobalStyles.title, {fontSize: 24, color: Colors.primary}]}>{frequency + 1}x</Text>
+              <Text style={[GlobalStyles.subtitle, {fontSize: 12}]}>al día</Text>
+              <Text style={{fontSize: 16, marginTop: 4}}>{icon}</Text>
+              <Text style={{fontSize: 10, color: Colors.textSecondary, textAlign: 'center', marginTop: 2}}>{time}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-        
-        {/* Botón de horario personalizado dentro del menú rápido */}
+
+        {/* Botón de horario personalizado */}
         <TouchableOpacity 
           style={styles.customButton}
           onPress={() => {
-            console.log('🔍 Medicamentos disponibles:', meds.length, meds);
-            setSelectedMedication(null);
-            setSelectedTimesPerDay(1);
-            setShowMedicationDropdown(false);
-            setShowCustomModal(true);
+            navigation.navigate('HorarioForm', { onSaved: reloadSchedules });
           }}
         >
           <Text style={styles.customButtonText}>⚙️ Configurar Horario Personalizado</Text>
-          <Text style={styles.customButtonSubtext}>Horarios específicos y flexibles</Text>
         </TouchableOpacity>
       </View>
 
@@ -318,262 +275,59 @@ export default function HorariosScreen() {
         />
       </View>
 
-      {/* Modal para horario personalizado */}
+      {/* Modal de selección de medicamento */}
       <Modal
-        visible={showCustomModal}
-        transparent
+        visible={showFrequencyModal}
         animationType="slide"
-        onRequestClose={() => setShowCustomModal(false)}
+        transparent={true}
+        onRequestClose={() => setShowFrequencyModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>⚙️ Horario Personalizado</Text>
-              <TouchableOpacity 
-                style={styles.modalCloseButton}
-                onPress={() => setShowCustomModal(false)}
-              >
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalDescription}>
-                Selecciona un medicamento y configura horarios específicos
-              </Text>
-              
-              {meds.length === 0 ? (
-                <View style={styles.noMedicationsContainer}>
-                  <Text style={styles.noMedicationsText}>⚠️ No hay medicamentos disponibles</Text>
-                  <Text style={styles.noMedicationsSubtext}>Primero necesitas crear un medicamento</Text>
-                  
-                  <TouchableOpacity 
-                    style={styles.modalActionButton}
-                    onPress={() => {
-                      setShowCustomModal(false);
-                      navigation.navigate('MedicationForm', { onSaved: () => {
-                        // Recargar medicamentos después de crear uno nuevo
-                        (async () => {
-                          const { data: { user } } = await supabase.auth.getUser();
-                          const medsRes = await supabase.from('medications').select('id,name').eq('patient_user_id', user!.id);
-                          setMeds((medsRes.data ?? []) as any);
-                        })();
-                      }});
-                    }}
-                  >
-                    <Text style={styles.modalActionText}>➕ Crear Medicamento</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.medicationSelection}>
-                  <Text style={styles.sectionTitle}>💊 Selecciona un medicamento:</Text>
-                  
-                  {/* Dropdown para medicamentos */}
-                  <TouchableOpacity 
-                    style={styles.dropdownContainer}
-                    onPress={() => setShowMedicationDropdown(!showMedicationDropdown)}
-                  >
-                    <Text style={styles.dropdownText}>
-                      {selectedMedication ? `🔹 ${selectedMedication.name}` : '📋 Seleccionar medicamento...'}
-                    </Text>
-                    <Text style={styles.dropdownArrow}>
-                      {showMedicationDropdown ? '▲' : '▼'}
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  {/* Lista desplegable con scroll */}
-                  {showMedicationDropdown && (
-                    <View style={styles.dropdownList}>
-                      <ScrollView 
-                        style={styles.dropdownScrollView}
-                        showsVerticalScrollIndicator={true}
-                        nestedScrollEnabled={true}
-                      >
-                        {meds.map((med, index) => (
-                          <TouchableOpacity 
-                            key={med.id}
-                            style={[
-                              styles.dropdownItem,
-                              index === meds.length - 1 && { borderBottomWidth: 0 }
-                            ]}
-                            onPress={() => {
-                              setSelectedMedication(med);
-                              setShowMedicationDropdown(false);
-                            }}
-                          >
-                            <Text style={styles.dropdownItemText}>🔹 {med.name}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  )}
-                  
-                  {/* Selección de frecuencia cuando se selecciona un medicamento */}
-                  {selectedMedication && (
-                    <View style={styles.frequencySection}>
-                      <Text style={styles.sectionTitle}>⏰ Frecuencia de administración:</Text>
-                      
-                      <View style={styles.frequencyGrid}>
-                        {[
-                          { times: 1, label: '1 vez al día', detail: 'Por la mañana', emoji: '🌅' },
-                          { times: 2, label: '2 veces al día', detail: 'Cada 12 horas', emoji: '🌅🌙' },
-                          { times: 3, label: '3 veces al día', detail: 'Cada 8 horas', emoji: '🌅🌞🌙' },
-                          { times: 4, label: '4 veces al día', detail: 'Cada 6 horas', emoji: '🌅🌞🌆🌙' },
-                        ].map((freq) => (
-                          <TouchableOpacity 
-                            key={freq.times}
-                            style={[
-                              styles.frequencyOption,
-                              selectedTimesPerDay === freq.times && styles.frequencyOptionSelected
-                            ]}
-                            onPress={() => setSelectedTimesPerDay(freq.times)}
-                          >
-                            <Text style={styles.frequencyEmoji}>{freq.emoji}</Text>
-                            <Text style={[
-                              styles.frequencyLabel,
-                              selectedTimesPerDay === freq.times && styles.frequencyLabelSelected
-                            ]}>
-                              {freq.label}
-                            </Text>
-                            <Text style={[
-                              styles.frequencyDetail,
-                              selectedTimesPerDay === freq.times && styles.frequencyDetailSelected
-                            ]}>
-                              {freq.detail}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                      
-                      <TouchableOpacity 
-                        style={styles.continueButton}
-                        onPress={() => {
-                          setShowCustomModal(false);
-                          setShowTimeModal(true);
-                        }}
-                      >
-                        <Text style={styles.continueButtonText}>
-                          ✅ Configurar Horarios - {selectedMedication.name}
-                        </Text>
-                        <Text style={styles.continueButtonSubtext}>
-                          {getFrequencyText(selectedTimesPerDay)}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity 
-                      style={[styles.modalActionButton, styles.modalSecondaryButton]}
-                      onPress={() => {
-                        setShowCustomModal(false);
-                        navigation.navigate('HorarioForm', { onSaved: reloadSchedules });
-                      }}
-                    >
-                      <Text style={styles.modalSecondaryText}>⚙️ Configuración Avanzada</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para selección rápida de medicamentos */}
-      <Modal
-        visible={showQuickModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowQuickModal(false)}
-      >
-        <View style={styles.modalOverlay}>
+        <View style={[GlobalStyles.center, {backgroundColor: 'rgba(0,0,0,0.5)', flex: 1}]}>
           <View style={styles.quickModalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                💊 Seleccionar Medicamento
-              </Text>
               <TouchableOpacity 
+                onPress={() => setShowFrequencyModal(false)}
                 style={styles.modalCloseButton}
-                onPress={() => setShowQuickModal(false)}
               >
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Text style={{fontSize: 20, color: Colors.textSecondary}}>✕</Text>
               </TouchableOpacity>
+              <Text style={[GlobalStyles.title, {textAlign: 'center'}]}>Seleccionar Medicamento</Text>
             </View>
             
-            <ScrollView style={styles.quickModalScrollView} showsVerticalScrollIndicator={false}>
-              <Text style={styles.quickModalDescription}>
-                Selecciona el medicamento para configurar {getFrequencyText(quickScheduleFrequency)}
-              </Text>
-              
+            <Text style={styles.quickModalDescription}>
+              Elige el medicamento para el cual quieres configurar el horario
+            </Text>
+            
+            <ScrollView style={styles.quickModalScrollView}>
               <View style={styles.quickMedicationList}>
-                {/* Dropdown para seleccionar medicamento */}
-                <TouchableOpacity 
-                  style={styles.quickDropdownContainer}
-                  onPress={() => setShowMedicationDropdown(!showMedicationDropdown)}
-                >
-                  <Text style={styles.quickDropdownText}>
-                    {selectedMedication ? `💊 ${selectedMedication.name}` : '💊 Medicamentos'}
-                  </Text>
-                  <Text style={styles.quickDropdownArrow}>
-                    {showMedicationDropdown ? '▲' : '▼'}
-                  </Text>
-                </TouchableOpacity>
-                
-                {/* Lista desplegable con scroll */}
-                {showMedicationDropdown && (
-                  <View style={styles.quickDropdownList}>
-                    <ScrollView 
-                      style={styles.quickDropdownScrollView}
-                      showsVerticalScrollIndicator={true}
-                      nestedScrollEnabled={true}
-                    >
-                      {meds.map((med, index) => (
-                        <TouchableOpacity 
-                          key={med.id}
-                          style={[
-                            styles.quickDropdownItem,
-                            index === meds.length - 1 && { borderBottomWidth: 0 }
-                          ]}
-                          onPress={() => {
-                            setSelectedMedication(med);
-                            setShowMedicationDropdown(false);
-                          }}
-                        >
-                          <Text style={styles.quickDropdownItemText}>💊 {med.name}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-                
-                {/* Botón para continuar cuando se seleccione un medicamento */}
-                {selectedMedication && (
-                  <TouchableOpacity 
-                    style={styles.quickContinueButton}
-                    onPress={() => selectMedicationForQuickSchedule(selectedMedication)}
+                {meds.map((med) => (
+                  <TouchableOpacity
+                    key={med.id}
+                    style={styles.quickMedicationItem}
+                    onPress={() => handleTimeSelection(med.id, selectedFrequency)}
                   >
-                    <Text style={styles.quickContinueButtonText}>
-                      ✅ Continuar con {selectedMedication.name}
-                    </Text>
-                    <Text style={styles.quickContinueButtonSubtext}>
-                      {getFrequencyText(quickScheduleFrequency)}
-                    </Text>
+                    <Text style={styles.quickMedicationText}>{med.name}</Text>
+                    <Text style={styles.quickMedicationArrow}>→</Text>
                   </TouchableOpacity>
-                )}
+                ))}
               </View>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
+      {/* Modal de selección de horarios */}
       <TimePickerModal
-        visible={showTimeModal}
-        onClose={() => setShowTimeModal(false)}
-        onSelectTime={handleTimeSelection}
-        title={selectedMedication ? `${selectedMedication.name} - ${getFrequencyText(selectedTimesPerDay)}` : ''}
-        subtitle="Selecciona la hora de la primera dosis"
+        visible={showTimePickerModal}
+        onClose={() => setShowTimePickerModal(false)}
+        onSelectTime={(hour) => {
+          const times = calculateScheduleTimes(selectedFrequency);
+          saveQuickSchedule(times);
+        }}
+        title={`Configurar ${getFrequencyText(selectedFrequency)}`}
+        subtitle="Selecciona los horarios para tomar tu medicamento"
       />
+
     </ScrollView>
   );
 }
@@ -698,6 +452,49 @@ const styles = StyleSheet.create({
     color: Colors.textOnPrimary + 'CC', // Más transparente
     fontStyle: 'italic',
     textAlign: 'center', // Centrar texto
+  },
+
+  // Estilos para el nuevo botón principal
+  mainCustomButton: {
+    minHeight: 120,
+    borderRadius: Layout.borderRadius.xl,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: Layout.spacing.xl,
+    paddingVertical: Layout.spacing.xl,
+    backgroundColor: Colors.primary,
+    marginTop: Layout.spacing.lg,
+    width: '100%',
+    ...Layout.shadow.large,
+  },
+
+  buttonIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.textOnPrimary + '20',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    marginBottom: Layout.spacing.md,
+  },
+
+  buttonIcon: {
+    fontSize: 32,
+  },
+
+  mainCustomButtonText: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textOnPrimary,
+    marginBottom: Layout.spacing.xs,
+    textAlign: 'center' as const,
+  },
+
+  mainCustomButtonSubtext: {
+    fontSize: Typography.sizes.base,
+    color: Colors.textOnPrimary + 'DD',
+    textAlign: 'center' as const,
+    fontStyle: 'italic' as const,
   },
   
   // Estilos del modal
