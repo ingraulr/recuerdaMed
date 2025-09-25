@@ -1,6 +1,6 @@
 // app/screens/MedicamentosScreen.tsx
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert, StyleSheet, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert, StyleSheet, TextInput, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { GlobalStyles, Colors, Layout, Typography } from '../constants/GlobalStyles';
@@ -13,6 +13,7 @@ type Medication = {
   dose: number | null;
   unit: string | null;
   notes: string | null;
+  image_url: string | null;
 };
 
 export default function MedicamentosScreen() {
@@ -32,7 +33,7 @@ export default function MedicamentosScreen() {
     // Cargar medicamentos
     const { data, error } = await supabase
       .from('medications')
-      .select('id,name,dose,unit,notes')
+      .select('id,name,dose,unit,notes,image_url')
       .eq('patient_user_id', user.id)
       .order('created_at', { ascending: false });
     
@@ -198,6 +199,21 @@ export default function MedicamentosScreen() {
         renderItem={({ item }) => (
           <View style={styles.medicationCard}>
             <View style={styles.medicationContent}>
+              {/* Imagen del medicamento */}
+              {item.image_url ? (
+                <View style={styles.medicationImageContainer}>
+                  <Image 
+                    source={{ uri: item.image_url }} 
+                    style={styles.medicationImage}
+                    resizeMode="cover"
+                  />
+                </View>
+              ) : (
+                <View style={styles.medicationImagePlaceholder}>
+                  <Text style={styles.medicationImagePlaceholderText}>💊</Text>
+                </View>
+              )}
+              
               <View style={styles.medicationInfo}>
                 <View style={styles.medicationHeader}>
                   <Text style={GlobalStyles.title}>{item.name}</Text>
@@ -283,13 +299,13 @@ const styles = StyleSheet.create({
   
   medicationContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
   
   medicationInfo: {
     flex: 1,
     paddingRight: Layout.spacing.sm,
+    justifyContent: 'center',
   },
   
   notesText: {
@@ -302,6 +318,7 @@ const styles = StyleSheet.create({
   medicationActions: {
     flexDirection: 'row',
     gap: Layout.spacing.xs,
+    alignItems: 'center',
   },
   
   actionButton: {
@@ -342,5 +359,38 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.xs,
     color: Colors.textOnPrimary,
     fontWeight: Typography.weights.medium,
+  },
+
+  medicationImageContainer: {
+    width: 60,
+    height: 60,
+    marginRight: Layout.spacing.md,
+    borderRadius: Layout.borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+
+  medicationImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  medicationImagePlaceholder: {
+    width: 60,
+    height: 60,
+    marginRight: Layout.spacing.md,
+    borderRadius: Layout.borderRadius.md,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  medicationImagePlaceholderText: {
+    fontSize: 24,
+    color: Colors.textSecondary,
   },
 });
