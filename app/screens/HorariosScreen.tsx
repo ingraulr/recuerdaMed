@@ -1,13 +1,21 @@
 // app/screens/HorariosScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Alert, StyleSheet, ScrollView, Modal } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Alert, StyleSheet, ScrollView, Modal, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { GlobalStyles, Colors, Layout, Typography } from '../constants/GlobalStyles';
 import TimePickerModal from '../components/TimePickerModal';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { NotificationService } from '../services/NotificationService';
 
-type Row = { id: string; medication_id: string; tz: string | null; fixed_times: string[] | null; medication_name: string };
+type Row = { 
+  id: string; 
+  medication_id: string; 
+  tz: string | null; 
+  fixed_times: string[] | null; 
+  medication_name: string;
+  medication_image_url: string | null;
+};
 
 export default function HorariosScreen() {
   const navigation = useNavigation<any>();
@@ -19,7 +27,7 @@ export default function HorariosScreen() {
   const [selectedFrequency, setSelectedFrequency] = useState(0);
   const [showTimePickerModal, setShowTimePickerModal] = useState(false);
   const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
-  const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState<{[scheduleId: string]: boolean}>({});
 
 
   useEffect(() => {
@@ -29,12 +37,13 @@ export default function HorariosScreen() {
       setMeds(medRes.data ?? []);
       const schRes = await supabase
         .from('schedules')
-        .select('id, medication_id, tz, fixed_times, medications(name)')
+        .select('id, medication_id, tz, fixed_times, medications(name, image_url)')
         .eq('patient_user_id', user!.id)
         .order('created_at', { ascending: false });
       const mapped = (schRes.data ?? []).map((r: any) => ({
         id: r.id, medication_id: r.medication_id, tz: r.tz, fixed_times: r.fixed_times,
         medication_name: r.medications?.name ?? '',
+        medication_image_url: r.medications?.image_url ?? null,
       }));
       setRows(mapped);
       setLoading(false);
@@ -51,14 +60,116 @@ export default function HorariosScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     const schRes = await supabase
       .from('schedules')
-      .select('id, medication_id, tz, fixed_times, medications(name)')
+      .select('id, medication_id, tz, fixed_times, medications(name, image_url)')
       .eq('patient_user_id', user!.id)
       .order('created_at', { ascending: false });
     const mapped = (schRes.data ?? []).map((r: any) => ({
       id: r.id, medication_id: r.medication_id, tz: r.tz, fixed_times: r.fixed_times,
       medication_name: r.medications?.name ?? '',
+      medication_image_url: r.medications?.image_url ?? null,
     }));
     setRows(mapped);
+  }
+
+  async function toggleNotifications(item: Row) {
+    try {
+      const hasPermission = await NotificationService.requestPermissions();
+      if (!hasPermission) {
+        Alert.alert(
+          'Permisos requeridos',
+          'Necesitas habilitar las notificaciones para recibir recordatorios de medicamentos.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const isCurrentlyEnabled = notificationsEnabled[item.id];
+      
+      if (isCurrentlyEnabled) {
+        // Cancelar notificaciones
+        await NotificationService.cancelScheduleNotifications(item.id);
+        setNotificationsEnabled(prev => ({ ...prev, [item.id]: false }));
+        Alert.alert('✅ Recordatorios desactivados', `Los recordatorios para ${item.medication_name} han sido cancelados.`);
+      } else {
+        // Activar notificaciones
+        await scheduleNotificationsForSchedule(item);
+        setNotificationsEnabled(prev => ({ ...prev, [item.id]: true }));
+        Alert.alert('🔔 Recordatorios activados', `Los recordatorios para ${item.medication_name} han sido programados.`);
+      }
+    } catch (error: any) {
+      console.error('Error toggling notifications:', error);
+      Alert.alert('Error', 'No se pudo cambiar el estado de las notificaciones');
+    }
+  }
+
+  async function scheduleNotificationsForSchedule(schedule: Row) {
+    try {
+      // Obtener información completa del medicamento
+      const { data: medicationData, error } = await supabase
+        .from('medications')
+        .select('name, dose, unit')
+        .eq('id', schedule.medication_id)
+        .single();
+
+      if (error || !medicationData) {
+        throw new Error('No se pudo obtener información del medicamento');
+      }
+
+      // Cancelar notificaciones existentes
+      await NotificationService.cancelScheduleNotifications(schedule.id);
+
+      // Programar nuevas notificaciones para cada horario
+      const promises = (schedule.fixed_times || []).map(async (time) => {
+        const reminder = {
+          id: `${schedule.id}-${time}`,
+          medicationId: schedule.medication_id,
+          medicationName: medicationData.name,
+          dose: medicationData.dose && medicationData.unit ? 
+            `${medicationData.dose} ${medicationData.unit}` : '',
+          time,
+          scheduleId: schedule.id,
+        };
+
+        return await NotificationService.scheduleMedicationReminder(reminder);
+      });
+
+      const results = await Promise.all(promises);
+      const successCount = results.filter(id => id !== null).length;
+      
+      console.log(`📱 Programados ${successCount} recordatorios para ${medicationData.name}`);
+    } catch (error) {
+      console.error('Error scheduling notifications:', error);
+      throw error;
+    }
+  }
+
+  async function setupNotifications() {
+    try {
+      const hasPermission = await NotificationService.requestPermissions();
+      if (!hasPermission) {
+        Alert.alert(
+          'Permisos necesarios',
+          'Para recibir recordatorios, necesitas habilitar las notificaciones en la configuración de tu dispositivo.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Configurar', onPress: () => {
+              // Aquí podrías abrir la configuración del sistema si es posible
+              Alert.alert('Configuración', 'Ve a Configuración > Notificaciones > RecuerdaMed y habilita las notificaciones.');
+            }}
+          ]
+        );
+        return;
+      }
+
+      Alert.alert(
+        '🔔 Recordatorios disponibles',
+        'Puedes activar recordatorios individuales para cada medicamento usando el botón 🔔 en la lista de horarios.',
+        [{ text: 'Entendido' }]
+      );
+    } catch (error) {
+      console.error('Error setting up notifications:', error);
+      Alert.alert('Error', 'No se pudo configurar las notificaciones');
+    }
   }
 
   function handleTimeSelection(medId: string, frequency: number) {
@@ -113,16 +224,6 @@ export default function HorariosScreen() {
     return times;
   }
 
-  function formatHourDisplay(times: string[]): string {
-    if (!times || times.length === 0) return 'Sin horarios';
-    return times.map(time => {
-      const [hour, minute] = time.split(':');
-      const hourNum = parseInt(hour);
-      const ampm = hourNum >= 12 ? 'PM' : 'AM';
-      const displayHour = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum;
-      return `${displayHour}:${minute} ${ampm}`;
-    }).join(', ');
-  }
 
   function formatTimezone(tz: string | null): string {
     if (!tz) return 'Sin zona horaria';
@@ -195,6 +296,15 @@ export default function HorariosScreen() {
         <Text style={styles.quickMenuTitle}>💊 Configurar Horarios</Text>
         <Text style={styles.quickMenuSubtitle}>Elige la frecuencia de tu medicamento</Text>
         
+        {/* Botón de configuración de notificaciones */}
+        <TouchableOpacity 
+          style={styles.notificationSetupButton}
+          onPress={setupNotifications}
+        >
+          <Text style={styles.notificationSetupText}>🔔 Configurar Recordatorios</Text>
+          <Text style={styles.notificationSetupSubtext}>Recibe notificaciones para no olvidar tus medicamentos</Text>
+        </TouchableOpacity>
+        
         {/* Botones de frecuencia */}
         <View style={styles.frequencyGrid}>
           {[
@@ -240,29 +350,60 @@ export default function HorariosScreen() {
           keyExtractor={i => i.id}
           renderItem={({ item }) => (
             <View style={[GlobalStyles.card, { marginBottom: 12 }]}>
-              <View style={styles.scheduleHeader}>
-                <Text style={GlobalStyles.title}>{item.medication_name}</Text>
-                <View style={styles.scheduleActions}>
-                  <TouchableOpacity 
-                    style={styles.actionButton}
-                    onPress={() => editSchedule(item)}
-                  >
-                    <Text style={styles.actionButtonText}>✏️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => deleteSchedule(item)}
-                  >
-                    <Text style={styles.actionButtonText}>🗑️</Text>
-                  </TouchableOpacity>
+              <View style={styles.scheduleContent}>
+                {/* Imagen del medicamento */}
+                {item.medication_image_url ? (
+                  <View style={styles.scheduleMedicationImageContainer}>
+                    <Image 
+                      source={{ uri: item.medication_image_url }} 
+                      style={styles.scheduleMedicationImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.scheduleMedicationImagePlaceholder}>
+                    <Text style={styles.scheduleMedicationImagePlaceholderText}>💊</Text>
+                  </View>
+                )}
+                
+                {/* Información del horario */}
+                <View style={styles.scheduleInfo}>
+                  <View style={styles.scheduleHeader}>
+                    <Text style={GlobalStyles.title}>{item.medication_name}</Text>
+                    <View style={styles.scheduleActions}>
+                      <TouchableOpacity 
+                        style={[
+                          styles.actionButton, 
+                          notificationsEnabled[item.id] && styles.notificationButtonActive
+                        ]}
+                        onPress={() => toggleNotifications(item)}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {notificationsEnabled[item.id] ? '🔔' : '🔕'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => editSchedule(item)}
+                      >
+                        <Text style={styles.actionButtonText}>✏️</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.actionButton, styles.deleteButton]}
+                        onPress={() => deleteSchedule(item)}
+                      >
+                        <Text style={styles.actionButtonText}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <Text style={GlobalStyles.muted}>
+                    📍 Hora de {formatTimezone(item.tz)}
+                  </Text>
+                  <Text style={{ marginTop: 4 }}>
+                    ⏰ {item.fixed_times?.map(t => t.slice(0,5)).join(' · ') || '—'}
+                  </Text>
                 </View>
               </View>
-              <Text style={GlobalStyles.muted}>
-                📍 Hora de {formatTimezone(item.tz)}
-              </Text>
-              <Text style={{ marginTop: 4 }}>
-                ⏰ {item.fixed_times?.map(t => t.slice(0,5)).join(' · ') || '—'}
-              </Text>
             </View>
           )}
           ListEmptyComponent={
@@ -420,6 +561,35 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: Colors.error + '20',
     borderColor: Colors.error,
+  },
+
+  notificationButtonActive: {
+    backgroundColor: Colors.primary + '20',
+    borderColor: Colors.primary,
+  },
+
+  notificationSetupButton: {
+    backgroundColor: Colors.background,
+    borderRadius: Layout.borderRadius.md,
+    padding: Layout.spacing.md,
+    marginBottom: Layout.spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+  },
+
+  notificationSetupText: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: Layout.spacing.xs,
+  },
+
+  notificationSetupSubtext: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   
   actionButtonText: {
@@ -993,5 +1163,47 @@ const styles = StyleSheet.create({
     color: Colors.textOnPrimary + 'CC',
     marginTop: 4,
     textAlign: 'center',
+  },
+
+  // Estilos para horarios con imagen
+  scheduleContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+
+  scheduleInfo: {
+    flex: 1,
+    paddingLeft: Layout.spacing.sm,
+  },
+
+  scheduleMedicationImageContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: Layout.borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+
+  scheduleMedicationImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  scheduleMedicationImagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: Layout.borderRadius.md,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  scheduleMedicationImagePlaceholderText: {
+    fontSize: 20,
+    color: Colors.textSecondary,
   },
 });
