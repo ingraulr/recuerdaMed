@@ -714,8 +714,8 @@ const styles = StyleSheet.create({
     borderRadius: Layout.borderRadius.xl,
     width: '90%',
     maxWidth: 400,
-    minHeight: 600,
-    maxHeight: '90%',
+    minHeight: 700,
+    maxHeight: '92%',
     ...Layout.shadow.large,
   },
   
@@ -934,12 +934,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     marginBottom: Layout.spacing.lg,
-    maxHeight: 300,
+    maxHeight: 400,
     ...Layout.shadow.medium,
   },
   
   dropdownScrollView: {
-    maxHeight: 300,
+    maxHeight: 400,
   },
   
   dropdownItem: {
@@ -1057,13 +1057,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     marginTop: 4,
-    maxHeight: 180,
+    maxHeight: 250,
     zIndex: 1000,
     ...Layout.shadow.medium,
   },
   
   quickDropdownScrollView: {
-    maxHeight: 180,
+    maxHeight: 250,
   },
   
   quickDropdownItem: {
@@ -1095,8 +1095,8 @@ const styles = StyleSheet.create({
     borderRadius: Layout.borderRadius.xl,
     width: '85%',
     maxWidth: 350,
-    minHeight: 400,
-    maxHeight: '75%',
+    minHeight: 500,
+    maxHeight: '80%',
     ...Layout.shadow.large,
   },
   

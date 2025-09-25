@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     borderBottomLeftRadius: Layout.borderRadius.md,
     borderBottomRightRadius: Layout.borderRadius.md,
-    maxHeight: 250,
+    maxHeight: 350,
     shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
