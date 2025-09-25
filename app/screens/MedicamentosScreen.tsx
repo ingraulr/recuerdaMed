@@ -4,7 +4,7 @@ import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert, StyleShe
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { GlobalStyles, Colors, Layout, Typography } from '../constants/GlobalStyles';
-import ModernLoading from '../components/ModernLoading';
+import LoadingAnimation from '../components/LoadingAnimation';
 import EmptyState from '../components/EmptyState';
 
 type Medication = {
@@ -158,7 +158,7 @@ export default function MedicamentosScreen() {
     }
   };
 
-  if (loading) return <ModernLoading size="large" />;
+  if (loading) return <LoadingAnimation message="Cargando medicamentos..." size="large" />;
 
   return (
     <View style={GlobalStyles.container}>

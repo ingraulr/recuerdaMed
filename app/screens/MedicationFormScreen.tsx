@@ -4,6 +4,7 @@ import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { GlobalStyles } from '../constants/GlobalStyles';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 export default function MedicationFormScreen() {
   const nav = useNavigation<any>();
@@ -62,6 +63,10 @@ export default function MedicationFormScreen() {
     );
     onSaved?.();
     nav.goBack();
+  }
+
+  if (saving) {
+    return <LoadingAnimation message="Guardando medicamento..." size="medium" />;
   }
 
   return (
