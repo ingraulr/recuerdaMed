@@ -8,14 +8,13 @@ export const GlobalStyles = StyleSheet.create({
   // Contenedores principales
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.background, // Fallback para dispositivos que no soportan gradientes
   },
   
   containerCentered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
     paddingHorizontal: Layout.padding.container,
   },
   
@@ -31,6 +30,8 @@ export const GlobalStyles = StyleSheet.create({
     borderRadius: Layout.borderRadius.lg,
     padding: Layout.padding.card,
     ...Layout.shadow.medium,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)', // Borde sutil para profundidad
   },
 
   medicationCard: {
@@ -41,6 +42,8 @@ export const GlobalStyles = StyleSheet.create({
     marginHorizontal: Layout.spacing.lg, // Mayor margen lateral
     marginVertical: Layout.spacing.md, // Margen vertical entre tarjetas
     ...Layout.shadow.medium,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)', // Borde sutil
   },
   
   surface: {

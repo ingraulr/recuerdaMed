@@ -11,9 +11,14 @@ export const Colors = {
   secondaryDark: '#374151',  // Gris oscuro
   
   // Colores de fondo
-  background: '#F8FAFC',     // Blanco azulado muy claro
+  background: '#F0F9FF',     // Azul muy claro con toque de cyan (sky-50)
+  backgroundGradient: {
+    start: '#FAFBFF',        // Casi blanco con toque azul
+    middle: '#F0F9FF',       // Azul muy claro (sky-50)
+    end: '#EBF8FF'           // Azul muy suave (blue-50)
+  },
   surface: '#FFFFFF',        // Blanco puro
-  surfaceLight: '#F1F5F9',   // Gris azulado muy claro
+  surfaceLight: '#F0F9FF',   // Azul muy claro para tarjetas
   
   // Colores de texto
   textPrimary: '#1F2937',    // Casi negro para buena legibilidad

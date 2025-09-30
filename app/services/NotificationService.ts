@@ -30,13 +30,17 @@ export class NotificationService {
    */
   static async requestPermissions(): Promise<boolean> {
     try {
+      console.log('🔧 DEBUG - Verificando si es dispositivo físico:', Device.isDevice);
       if (Device.isDevice) {
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        console.log('🔧 DEBUG - Estado actual de permisos:', existingStatus);
         let finalStatus = existingStatus;
         
         if (existingStatus !== 'granted') {
+          console.log('🔧 DEBUG - Solicitando permisos...');
           const { status } = await Notifications.requestPermissionsAsync();
           finalStatus = status;
+          console.log('🔧 DEBUG - Nuevo estado de permisos:', finalStatus);
         }
         
         if (finalStatus !== 'granted') {
@@ -79,12 +83,18 @@ export class NotificationService {
    */
   static async scheduleMedicationReminder(reminder: MedicationReminder): Promise<string | null> {
     try {
+      console.log('🔧 DEBUG - Iniciando programación de recordatorio:', reminder);
+      
       const hasPermission = await this.requestPermissions();
+      console.log('🔧 DEBUG - ¿Tiene permisos?:', hasPermission);
+      
       if (!hasPermission) {
+        console.log('❌ DEBUG - No hay permisos, cancelando');
         return null;
       }
 
       const [hours, minutes] = reminder.time.split(':').map(Number);
+      console.log('🔧 DEBUG - Hora programada:', { hours, minutes });
       
       // Crear la fecha para hoy
       const now = new Date();
@@ -95,6 +105,16 @@ export class NotificationService {
       if (scheduledTime <= now) {
         scheduledTime.setDate(scheduledTime.getDate() + 1);
       }
+
+      console.log('🔧 DEBUG - Configuración de notificación:', {
+        title: '💊 Hora de tu medicamento',
+        body: `Es hora de tomar ${reminder.medicationName}${reminder.dose ? ` (${reminder.dose})` : ''}`,
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: hours,
+          minute: minutes,
+        }
+      });
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
@@ -109,14 +129,53 @@ export class NotificationService {
             type: 'medication_reminder'
           },
         },
-        trigger: null,
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: hours,
+          minute: minutes,
+        },
       });
 
-      console.log(`📅 Recordatorio programado para ${reminder.medicationName} a las ${reminder.time} (ID: ${identifier})`);
+      console.log(`✅ DEBUG - Recordatorio programado para ${reminder.medicationName} a las ${reminder.time} (ID: ${identifier})`);
       return identifier;
     } catch (error) {
-      console.error('Error scheduling notification:', error);
-      Alert.alert('Error', 'No se pudo programar el recordatorio');
+      console.error('❌ DEBUG - Error scheduling notification:', error);
+      Alert.alert('Error', `No se pudo programar el recordatorio: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Programa una notificación de prueba inmediata
+   */
+  static async scheduleTestNotification(): Promise<string | null> {
+    try {
+      console.log('🧪 DEBUG - Programando notificación de prueba...');
+      
+      const hasPermission = await this.requestPermissions();
+      if (!hasPermission) {
+        Alert.alert('Sin permisos', 'Se necesitan permisos de notificación');
+        return null;
+      }
+
+      const identifier = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🧪 Prueba de RecuerdaMed',
+          body: 'Si ves esto, las notificaciones funcionan correctamente',
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 2,
+        },
+      });
+
+      console.log('✅ DEBUG - Notificación de prueba programada (ID:', identifier, ')');
+      Alert.alert('Prueba programada', 'En 2 segundos deberías ver la notificación');
+      return identifier;
+    } catch (error) {
+      console.error('❌ DEBUG - Error en notificación de prueba:', error);
+      Alert.alert('Error', `Error en prueba: ${error}`);
       return null;
     }
   }
@@ -126,6 +185,8 @@ export class NotificationService {
    */
   static async scheduleMultipleReminders(reminders: MedicationReminder[]): Promise<string[]> {
     const identifiers: string[] = [];
+    
+    console.log('🔧 DEBUG - Programando múltiples recordatorios:', reminders);
     
     for (const reminder of reminders) {
       const id = await this.scheduleMedicationReminder(reminder);
