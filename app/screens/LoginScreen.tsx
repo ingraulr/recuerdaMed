@@ -16,6 +16,7 @@ import { GlobalStyles } from '../constants/GlobalStyles';
 import { Colors } from '../constants/Colors';
 import { Layout } from '../constants/Layout';
 import { Typography } from '../constants/Typography';
+import { GradientBackground } from '../components/GradientBackground';
 
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -153,12 +154,13 @@ export default function LoginScreen({ navigation }: any) {
   }
 
   return (
-    <KeyboardAvoidingView 
-      style={GlobalStyles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View style={GlobalStyles.containerCentered}>
+    <GradientBackground>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          <View style={GlobalStyles.containerCentered}>
           
           {/* Logo y título */}
           <View style={styles.headerContainer}>
@@ -276,6 +278,7 @@ export default function LoginScreen({ navigation }: any) {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  </GradientBackground>
   );
 }
 

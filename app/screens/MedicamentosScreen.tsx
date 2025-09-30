@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabase';
 import { GlobalStyles, Colors, Layout, Typography } from '../constants/GlobalStyles';
 import LoadingAnimation from '../components/LoadingAnimation';
 import EmptyState from '../components/EmptyState';
+import { SimpleNotificationService } from '../services/SimpleNotificationService';
+import { GradientBackground } from '../components/GradientBackground';
 
 type Medication = {
   id: string;
@@ -85,6 +87,16 @@ export default function MedicamentosScreen() {
     });
   };
 
+  const testNotifications = async () => {
+    try {
+      console.log('🧪 Iniciando prueba de notificaciones...');
+      await SimpleNotificationService.scheduleTestNotification();
+    } catch (error) {
+      console.error('❌ Error en prueba de notificaciones:', error);
+      Alert.alert('Error', 'No se pudo probar las notificaciones');
+    }
+  };
+
   const deleteMedication = async (medication: Medication) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -162,7 +174,8 @@ export default function MedicamentosScreen() {
   if (loading) return <LoadingAnimation message="Cargando medicamentos..." size="large" />;
 
   return (
-    <View style={GlobalStyles.container}>
+    <GradientBackground>
+      <View style={{ flex: 1 }}>
       {/* Barra de búsqueda */}
       <View style={styles.searchContainer}>
         <TextInput
@@ -215,16 +228,7 @@ export default function MedicamentosScreen() {
               )}
               
               <View style={styles.medicationInfo}>
-                <View style={styles.medicationHeader}>
-                  <Text style={GlobalStyles.title}>{item.name}</Text>
-                  {medicationSchedules[item.id] > 0 && (
-                    <View style={styles.schedulesBadge}>
-                      <Text style={styles.schedulesBadgeText}>
-                        {medicationSchedules[item.id]} horario{medicationSchedules[item.id] > 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                <Text style={styles.medicationTitle}>{item.name}</Text>
                 <Text style={GlobalStyles.muted}>
                   {item.dose && item.unit ? `${item.dose} ${item.unit}` : 'Sin dosis especificada'}
                 </Text>
@@ -246,6 +250,15 @@ export default function MedicamentosScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+            
+            {/* Tag de horarios en esquina inferior derecha */}
+            {medicationSchedules[item.id] > 0 && (
+              <View style={styles.schedulesBadge}>
+                <Text style={styles.schedulesBadgeText}>
+                  {medicationSchedules[item.id]} horario{medicationSchedules[item.id] > 1 ? 's' : ''}
+                </Text>
+              </View>
+            )}
           </View>
         )}
       />
@@ -255,7 +268,38 @@ export default function MedicamentosScreen() {
       >
         <Text style={GlobalStyles.fabText}>＋</Text>
       </TouchableOpacity>
+      
+      {/* Botones de prueba de notificaciones - solo para desarrollo */}
+      <TouchableOpacity
+        style={[GlobalStyles.fab, { bottom: 100, backgroundColor: Colors.warning }]}
+        onPress={testNotifications}
+      >
+        <Text style={GlobalStyles.fabText}>🔔</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={[GlobalStyles.fab, { bottom: 160, backgroundColor: Colors.success }]}
+        onPress={() => SimpleNotificationService.listScheduledNotifications()}
+      >
+        <Text style={GlobalStyles.fabText}>📋</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={[GlobalStyles.fab, { bottom: 220, backgroundColor: Colors.secondary }]}
+        onPress={() => SimpleNotificationService.cancelAllNotifications()}
+      >
+        <Text style={GlobalStyles.fabText}>🗑️</Text>
+      </TouchableOpacity>
+      
+      {/* Botón de debug - solo para desarrollo */}
+      <TouchableOpacity
+        style={[GlobalStyles.fab, { bottom: 280, backgroundColor: Colors.error }]}
+        onPress={() => nav.navigate('Debug')}
+      >
+        <Text style={GlobalStyles.fabText}>🔧</Text>
+      </TouchableOpacity>
     </View>
+  </GradientBackground>
   );
 }
 
@@ -295,6 +339,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: 'relative',
   },
   
   medicationContent: {
@@ -341,18 +386,28 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.base,
   },
   
-  medicationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
+
   
   schedulesBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
     backgroundColor: Colors.primary,
     borderRadius: Layout.borderRadius.sm,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  
+  medicationTitle: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textPrimary,
+    marginBottom: 2,
   },
   
   schedulesBadgeText: {
@@ -362,8 +417,8 @@ const styles = StyleSheet.create({
   },
 
   medicationImageContainer: {
-    width: 60,
-    height: 60,
+    width: 48,
+    height: 48,
     marginRight: Layout.spacing.md,
     borderRadius: Layout.borderRadius.md,
     overflow: 'hidden',
@@ -378,8 +433,8 @@ const styles = StyleSheet.create({
   },
 
   medicationImagePlaceholder: {
-    width: 60,
-    height: 60,
+    width: 48,
+    height: 48,
     marginRight: Layout.spacing.md,
     borderRadius: Layout.borderRadius.md,
     backgroundColor: Colors.background,
@@ -390,7 +445,7 @@ const styles = StyleSheet.create({
   },
 
   medicationImagePlaceholderText: {
-    fontSize: 24,
+    fontSize: 20,
     color: Colors.textSecondary,
   },
 });

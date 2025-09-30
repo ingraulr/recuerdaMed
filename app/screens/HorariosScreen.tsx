@@ -263,23 +263,32 @@ export default function HorariosScreen() {
   function deleteSchedule(item: Row) {
     Alert.alert(
       'Eliminar horario',
-      `¿Estás seguro de que quieres eliminar el horario de ${item.medication_name}?`,
+      `¿Estás seguro de que quieres eliminar el horario de ${item.medication_name}?\n\n⚠️ También se cancelarán todos los recordatorios asociados.`,
       [
         { text: '❌ Cancelar', style: 'cancel' },
         { 
           text: '🗑️ Eliminar', 
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase
-              .from('schedules')
-              .delete()
-              .eq('id', item.id);
-            
-            if (error) {
-              Alert.alert('Error', error.message);
-            } else {
-              Alert.alert('Eliminado', 'Horario eliminado correctamente');
-              await reloadSchedules();
+            try {
+              // Cancelar todas las notificaciones asociadas a este horario
+              await NotificationService.cancelScheduleNotifications(item.id);
+              
+              // Eliminar el horario de la base de datos
+              const { error } = await supabase
+                .from('schedules')
+                .delete()
+                .eq('id', item.id);
+              
+              if (error) {
+                Alert.alert('Error', error.message);
+              } else {
+                Alert.alert('✅ Eliminado', 'Horario y recordatorios eliminados correctamente');
+                await reloadSchedules();
+              }
+            } catch (error) {
+              console.error('Error deleting schedule and notifications:', error);
+              Alert.alert('Error', 'Hubo un problema al eliminar el horario y sus notificaciones');
             }
           }
         }
@@ -290,7 +299,15 @@ export default function HorariosScreen() {
   if (loading) return <LoadingAnimation message="Cargando horarios..." size="large" />;
 
   return (
-    <ScrollView style={GlobalStyles.contentContainer} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={GlobalStyles.contentContainer} 
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingHorizontal: Layout.spacing.lg,
+        paddingTop: Layout.spacing.md,
+        paddingBottom: Layout.spacing.xl,
+      }}
+    >
       {/* Menú de configuración rápida */}
       <View style={styles.quickMenu}>
         <Text style={styles.quickMenuTitle}>💊 Configurar Horarios</Text>
@@ -368,40 +385,42 @@ export default function HorariosScreen() {
                 
                 {/* Información del horario */}
                 <View style={styles.scheduleInfo}>
-                  <View style={styles.scheduleHeader}>
-                    <Text style={GlobalStyles.title}>{item.medication_name}</Text>
-                    <View style={styles.scheduleActions}>
-                      <TouchableOpacity 
-                        style={[
-                          styles.actionButton, 
-                          notificationsEnabled[item.id] && styles.notificationButtonActive
-                        ]}
-                        onPress={() => toggleNotifications(item)}
-                      >
-                        <Text style={styles.actionButtonText}>
-                          {notificationsEnabled[item.id] ? '🔔' : '🔕'}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.actionButton}
-                        onPress={() => editSchedule(item)}
-                      >
-                        <Text style={styles.actionButtonText}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={[styles.actionButton, styles.deleteButton]}
-                        onPress={() => deleteSchedule(item)}
-                      >
-                        <Text style={styles.actionButtonText}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
+                  <Text style={GlobalStyles.title}>{item.medication_name}</Text>
+                  <View style={styles.scheduleDetails}>
+                    <Text style={[GlobalStyles.muted, styles.scheduleTag]}>
+                      📍 {formatTimezone(item.tz)}
+                    </Text>
+                    <Text style={[styles.scheduleTag, styles.timeTag]}>
+                      ⏰ {item.fixed_times?.map(t => t.slice(0,5)).join(' · ') || '—'}
+                    </Text>
                   </View>
-                  <Text style={GlobalStyles.muted}>
-                    📍 Hora de {formatTimezone(item.tz)}
-                  </Text>
-                  <Text style={{ marginTop: 4 }}>
-                    ⏰ {item.fixed_times?.map(t => t.slice(0,5)).join(' · ') || '—'}
-                  </Text>
+                </View>
+                
+                {/* Botones de acción en esquina inferior derecha */}
+                <View style={styles.scheduleActions}>
+                  <TouchableOpacity 
+                    style={[
+                      styles.actionButton, 
+                      notificationsEnabled[item.id] && styles.notificationButtonActive
+                    ]}
+                    onPress={() => toggleNotifications(item)}
+                  >
+                    <Text style={styles.actionButtonText}>
+                      {notificationsEnabled[item.id] ? '🔔' : '🔕'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => editSchedule(item)}
+                  >
+                    <Text style={styles.actionButtonText}>✏️</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => deleteSchedule(item)}
+                  >
+                    <Text style={styles.actionButtonText}>🗑️</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -543,8 +562,26 @@ const styles = StyleSheet.create({
   },
   
   scheduleActions: {
+    position: 'absolute',
+    bottom: Layout.spacing.md,
+    right: Layout.spacing.md,
     flexDirection: 'row',
     gap: Layout.spacing.xs,
+  },
+
+  scheduleDetails: {
+    marginTop: Layout.spacing.sm,
+    marginLeft: Layout.spacing.sm, // Mover tags un poco más a la izquierda
+  },
+
+  scheduleTag: {
+    marginBottom: Layout.spacing.xs,
+    fontSize: Typography.sizes.sm,
+  },
+
+  timeTag: {
+    color: Colors.primary,
+    fontWeight: Typography.weights.medium,
   },
   
   actionButton: {
@@ -1169,11 +1206,14 @@ const styles = StyleSheet.create({
   scheduleContent: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    position: 'relative',
+    paddingBottom: Layout.spacing.xl, // Espacio para los botones
   },
 
   scheduleInfo: {
     flex: 1,
     paddingLeft: Layout.spacing.sm,
+    paddingRight: Layout.spacing.lg, // Espacio para los botones
   },
 
   scheduleMedicationImageContainer: {

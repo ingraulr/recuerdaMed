@@ -16,6 +16,13 @@ const fromExtra = (Constants.expoConfig?.extra ?? {}) as {
 const SUPABASE_URL = fromEnv.url ?? fromExtra.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = fromEnv.key ?? fromExtra.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+// Debug logs
+console.log('🔧 DEBUG SUPABASE CONFIG:');
+console.log('  fromEnv.url:', fromEnv.url ? 'SET' : 'NOT SET');
+console.log('  fromEnv.key:', fromEnv.key ? 'SET' : 'NOT SET');
+console.log('  SUPABASE_URL:', SUPABASE_URL ? 'CONFIGURED' : 'MISSING');
+console.log('  SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'CONFIGURED' : 'MISSING');
+
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.log('EXTRA =>', Constants.expoConfig?.extra); // debug
   throw new Error('Faltan variables: SUPABASE_URL o SUPABASE_ANON_KEY');
