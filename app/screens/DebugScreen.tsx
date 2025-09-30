@@ -6,8 +6,12 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
+  Alert,
 } from 'react-native';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
+import { NotificationService } from '../services/NotificationService';
 import { GlobalStyles } from '../constants/GlobalStyles';
 import { Colors } from '../constants/Colors';
 
@@ -142,6 +146,59 @@ export default function DebugScreen({ navigation }: any) {
     addLog(`Sesión válida: ${session ? 'Sí' : 'No'}`);
   };
 
+  const testNotificationPermissions = async () => {
+    setLoading(true);
+    try {
+      addLog('=== PRUEBA DE PERMISOS DE NOTIFICACIÓN ===');
+      addLog(`Device.isDevice: ${Device.isDevice}`);
+      
+      const permissions = await Notifications.getPermissionsAsync();
+      addLog(`Estado actual: ${permissions.status}`);
+      addLog(`Puede preguntar: ${permissions.canAskAgain}`);
+      addLog(`Granted: ${permissions.granted}`);
+      
+      if (!permissions.granted) {
+        addLog('Solicitando permisos...');
+        const newPermissions = await Notifications.requestPermissionsAsync();
+        addLog(`Nuevo estado: ${newPermissions.status}`);
+      }
+    } catch (error: any) {
+      addLog(`❌ Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testImmediateNotification = async () => {
+    setLoading(true);
+    try {
+      addLog('=== PRUEBA NOTIFICACIÓN INMEDIATA ===');
+      const result = await NotificationService.scheduleTestNotification();
+      addLog(`Resultado: ${result ? '✅ Programada ID: ' + result : '❌ Falló'}`);
+    } catch (error: any) {
+      addLog(`❌ Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const listScheduledNotifications = async () => {
+    setLoading(true);
+    try {
+      addLog('=== NOTIFICACIONES PROGRAMADAS ===');
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      addLog(`Total programadas: ${scheduled.length}`);
+      scheduled.forEach((notif, index) => {
+        addLog(`${index + 1}. ID: ${notif.identifier}`);
+        addLog(`   Título: ${notif.content.title}`);
+      });
+    } catch (error: any) {
+      addLog(`❌ Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <ScrollView style={GlobalStyles.container}>
       <View style={{ padding: 20 }}>
@@ -225,6 +282,31 @@ export default function DebugScreen({ navigation }: any) {
             <Text style={[GlobalStyles.buttonText, GlobalStyles.buttonTextSecondary]}>
               Cerrar Sesión
             </Text>
+          </TouchableOpacity>
+
+          {/* Botones de prueba de notificaciones */}
+          <TouchableOpacity
+            style={[GlobalStyles.button, { backgroundColor: Colors.primary }, { marginBottom: 10 }]}
+            onPress={testNotificationPermissions}
+            disabled={loading}
+          >
+            <Text style={GlobalStyles.buttonText}>🔔 Verificar Permisos</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[GlobalStyles.button, { backgroundColor: Colors.success }, { marginBottom: 10 }]}
+            onPress={testImmediateNotification}
+            disabled={loading}
+          >
+            <Text style={GlobalStyles.buttonText}>🧪 Prueba Inmediata</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[GlobalStyles.button, { backgroundColor: Colors.secondary }, { marginBottom: 10 }]}
+            onPress={listScheduledNotifications}
+            disabled={loading}
+          >
+            <Text style={GlobalStyles.buttonText}>📋 Ver Programadas</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

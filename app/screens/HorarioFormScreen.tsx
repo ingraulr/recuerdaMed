@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabase';
 import { GlobalStyles, Colors, Layout, Typography } from '../constants/GlobalStyles';
 import TimePickerModal from '../components/TimePickerModal';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { useNotifications } from '../hooks/useNotifications';
+import { NotificationService } from '../services/NotificationService';
 
 type Medication = {
   id: string;
@@ -16,6 +18,7 @@ export default function HorarioFormScreen() {
   const nav = useNavigation<any>();
   const route = useRoute<any>();
   const onSaved = route.params?.onSaved;
+  const { requestPermissions } = useNotifications();
 
   const [medications, setMedications] = useState<Medication[]>([]);
   const [selectedMedication, setSelectedMedication] = useState<string>('');
@@ -97,23 +100,66 @@ export default function HorarioFormScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     
-    const { error } = await supabase.from('schedules').insert({
-      patient_user_id: user!.id,
-      medication_id: selectedMedication,
-      tz,
-      fixed_times: getTimesArray(finalHours),
-      tolerance_minutes: 30,
-    });
+    // Insertar el horario en la base de datos
+    const { data: scheduleData, error } = await supabase
+      .from('schedules')
+      .insert({
+        patient_user_id: user!.id,
+        medication_id: selectedMedication,
+        tz,
+        fixed_times: getTimesArray(finalHours),
+        tolerance_minutes: 30,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      setSaving(false);
+      return Alert.alert('Error', error.message);
+    }
+
+    // Obtener información del medicamento para las notificaciones
+    const selectedMed = medications.find(m => m.id === selectedMedication);
+    
+    if (selectedMed && scheduleData) {
+      try {
+        // Solicitar permisos de notificaciones
+        const hasPermission = await requestPermissions();
+        
+        if (hasPermission) {
+          // Programar notificaciones para cada horario
+          const reminders = finalHours.map(hour => ({
+            id: `${scheduleData.id}-${hour}`,
+            medicationId: selectedMedication,
+            medicationName: selectedMed.name,
+            dose: '', // Podemos obtener esto de la BD si es necesario
+            time: `${String(Math.floor(hour)).padStart(2, '0')}:${String(Math.round((hour % 1) * 60)).padStart(2, '0')}`,
+            scheduleId: scheduleData.id,
+          }));
+          
+          const scheduledIds = await NotificationService.scheduleMultipleReminders(reminders);
+          console.log(`📱 Programadas ${scheduledIds.length} notificaciones para ${selectedMed.name}`);
+        } else {
+          Alert.alert(
+            'Recordatorios no configurados',
+            'Se guardó el horario pero no se pudieron programar las notificaciones. Puedes habilitarlas en la configuración de tu dispositivo.',
+            [{ text: 'OK' }]
+          );
+        }
+      } catch (notificationError) {
+        console.error('Error programming notifications:', notificationError);
+        Alert.alert(
+          'Horario guardado',
+          'El horario se guardó correctamente, pero hubo un problema configurando los recordatorios.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
 
     setSaving(false);
-    
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
-      Alert.alert('¡Listo!', 'Horario guardado correctamente');
-      onSaved?.();
-      nav.goBack();
-    }
+    Alert.alert('¡Listo!', 'Horario y recordatorios configurados correctamente');
+    onSaved?.();
+    nav.goBack();
   }
 
   function addCustomHour() {

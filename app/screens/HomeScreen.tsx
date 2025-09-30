@@ -16,6 +16,7 @@ import { GlobalStyles } from '../constants/GlobalStyles';
 import { Colors } from '../constants/Colors';
 import { Layout } from '../constants/Layout';
 import { Typography } from '../constants/Typography';
+import { GradientBackground } from '../components/GradientBackground';
 
 // Ajusta la ruta según tu proyecto
 import { supabase } from '../lib/supabase';
@@ -333,8 +334,9 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={GlobalStyles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+    <GradientBackground>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Header con saludo y logout */}
         <View style={styles.headerContainer}>
           <View style={styles.greetingSection}>
@@ -449,8 +451,12 @@ export default function HomeScreen() {
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Horarios</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionButton} activeOpacity={0.8}>
-              <Text style={styles.quickActionIcon}>📱</Text>
+            <TouchableOpacity 
+              style={styles.quickActionButton} 
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Recordatorios')}
+            >
+              <Text style={styles.quickActionIcon}>⏲️</Text>
               <Text style={styles.quickActionText}>Recordatorios</Text>
             </TouchableOpacity>
             <TouchableOpacity 
@@ -467,6 +473,7 @@ export default function HomeScreen() {
 
       </ScrollView>
     </SafeAreaView>
+  </GradientBackground>
   );
 }
 

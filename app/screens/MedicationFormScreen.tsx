@@ -6,7 +6,6 @@ import { GlobalStyles, Colors, Layout, Typography } from '../constants/GlobalSty
 import { useNavigation, useRoute } from '@react-navigation/native';
 import LoadingAnimation from '../components/LoadingAnimation';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 
 export default function MedicationFormScreen() {
   const nav = useNavigation<any>();
@@ -98,27 +97,27 @@ export default function MedicationFormScreen() {
     try {
       setUploadingImage(true);
       
-      // Obtener información del archivo
-      const fileInfo = await FileSystem.getInfoAsync(uri);
-      if (!fileInfo.exists) {
-        throw new Error('El archivo no existe');
-      }
-
       // Crear un nombre único para el archivo
       const { data: { user } } = await supabase.auth.getUser();
       const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${user!.id}-${Date.now()}.${fileExt}`;
       const filePath = `medication-images/${fileName}`;
 
-      // Leer el archivo como base64
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: 'base64',
-      });
+      // Crear FormData para la subida
+      const formData = new FormData();
+      formData.append('file', {
+        uri: uri,
+        type: `image/${fileExt}`,
+        name: fileName,
+      } as any);
 
-      // Subir a Supabase Storage
-      const { data, error } = await supabase.storage
+      // Subir usando fetch directamente (más compatible)
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      
+      const { error } = await supabase.storage
         .from('medication-images')
-        .upload(filePath, decode(base64), {
+        .upload(filePath, blob, {
           contentType: `image/${fileExt}`,
           upsert: false
         });
@@ -139,15 +138,6 @@ export default function MedicationFormScreen() {
     } finally {
       setUploadingImage(false);
     }
-  }
-
-  function decode(base64: string): Uint8Array {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
   }
 
   async function removeImage() {
@@ -218,8 +208,16 @@ export default function MedicationFormScreen() {
   }
 
   return (
-    <ScrollView style={GlobalStyles.contentContainer} showsVerticalScrollIndicator={false}>
-      <View style={{ gap: 12, paddingBottom: 20 }}>
+    <ScrollView 
+      style={GlobalStyles.contentContainer} 
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingHorizontal: Layout.spacing.lg,
+        paddingTop: Layout.spacing.md,
+        paddingBottom: Layout.spacing.xl * 2, // Más espacio abajo
+      }}
+    >
+      <View style={{ gap: Layout.spacing.lg }}>
         <Text style={GlobalStyles.subtitle}>
           {isEditing ? 'Editar Medicamento' : 'Nuevo Medicamento'}
         </Text>
